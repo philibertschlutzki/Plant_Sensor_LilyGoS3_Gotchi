@@ -1,10 +1,3 @@
-Das ist ein sehr guter Punkt. In der vorherigen Version war die Smartphone-Suche nur kurz angerissen. In einer guten Dokumentation sollte dieser essenzielle Schritt für Anfänger idiotensicher erklärt sein.
-
-Ich habe deine aktuelle Repository-Struktur analysiert[cite: 2] und die `README.md` komplett überarbeitet. Sie enthält nun genaue Hardware-Spezifikationen, Platzhalter für deine eigenen Fotos und die detaillierte Schritt-für-Schritt-Anleitung für die "nRF Connect" App.
-
-Kopiere den folgenden Text und ersetze damit den kompletten Inhalt deiner bisherigen `README.md` Datei:
-
-```markdown
 # 🪴 Plant Sensor LilyGo S3 Gotchi
 
 Dieses Projekt verwandelt ein **LILYGO T-Display-S3** in einen kleinen Monitor ("Gotchi"), der sich über Bluetooth mit einem **Xiaomi Mi Flora** Pflanzensensor verbindet und die aktuellen Messwerte der Pflanze direkt auf dem Display anzeigt.
@@ -21,20 +14,12 @@ Das Herzstück des Projekts. Es handelt sich um ein kompaktes Entwicklungsboard 
 * **Display:** 1.9 Zoll ST7789 IPS LCD (Auflösung: 170x320 Pixel)
 * **Anschluss:** USB-C (für Strom und Daten)
 
-*(Tipp: Speichere ein Foto deines LILYGO Displays im Repo, z.B. im Ordner `images/lilygo.jpg`, und binde es hier ein)*
-<!-- ![Foto des LILYGO T-Display-S3](images/lilygo.jpg) -->
-
 ### 2. Xiaomi Mi Flora (HHCC Flower Care)
 Ein batteriebetriebener Sensor, der direkt in die Blumenerde gesteckt wird. Er misst vier entscheidende Parameter:
 * Bodenfeuchtigkeit (%)
 * Nährstoffgehalt / Leitfähigkeit (µS/cm)
 * Temperatur (°C)
 * Lichtintensität (Lux)
-
-*(Tipp: Speichere ein Foto deines Sensors im Repo, z.B. im Ordner `images/miflora.jpg`, und binde es hier ein)*
-<!-- ![Foto des Mi Flora Sensors](images/miflora.jpg) -->
-
----
 
 ## 🚀 Installation & Nutzung
 
