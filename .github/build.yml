@@ -30,8 +30,6 @@ jobs:
           name: LilyGo_Gotchi_Firmware
           path: .pio/build/lilygo-t-display-s3/*.bin
 
-      # --- AB HIER SIND DIE NEUEN SCHRITTE ---
-
       - name: Create ZIP for Release
         # Das -j sorgt dafür, dass keine nervigen Unterordner mit in die ZIP gepackt werden
         run: |
