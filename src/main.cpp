@@ -4,7 +4,7 @@
 
 // --- DEINE KONFIGURATION ---
 // Trage hier die MAC-Adresse deines Mi Flora Sensors ein
-static NimBLEAddress floraAddress("C4:7C:8D:XX:XX:XX"); 
+static NimBLEAddress floraAddress("5C:85:7E:B0:00:57");
 
 TFT_eSPI tft = TFT_eSPI();
 
