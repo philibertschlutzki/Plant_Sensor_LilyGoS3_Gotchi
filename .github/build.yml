@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main" ]
 
+# WICHTIG: Erlaubt dem Skript, Dateien unter "Releases" hochzuladen
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,7 +28,7 @@ jobs:
       - name: Compile Firmware
         run: pio run
 
-      - name: Upload Artifacts
+      - name: Upload Artifacts (Action Tab)
         uses: actions/upload-artifact@v3
         with:
           name: LilyGo_Gotchi_Firmware
@@ -32,3 +36,19 @@ jobs:
             .pio/build/lilygo-t-display-s3/firmware.bin
             .pio/build/lilygo-t-display-s3/partitions.bin
             .pio/build/lilygo-t-display-s3/bootloader.bin
+
+      # --- AB HIER SIND DIE NEUEN SCHRITTE ---
+
+      - name: Create ZIP for Release
+        # Das -j sorgt dafür, dass keine nervigen Unterordner mit in die ZIP gepackt werden
+        run: |
+          zip -j LilyGo_Gotchi_Firmware.zip .pio/build/lilygo-t-display-s3/firmware.bin .pio/build/lilygo-t-display-s3/partitions.bin .pio/build/lilygo-t-display-s3/bootloader.bin
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          # Wir nutzen die interne Lauf-Nummer von GitHub, um automatisch Versionsnummern zu vergeben (z.B. Build #4)
+          tag_name: build-${{ github.run_number }}
+          name: Firmware Build #${{ github.run_number }}
+          body: "🤖 Automatisch kompilierte Firmware. Lade die angehängte ZIP-Datei herunter und flashe die drei `.bin` Dateien über das Adafruit WebSerial ESPTool."
+          files: LilyGo_Gotchi_Firmware.zip
