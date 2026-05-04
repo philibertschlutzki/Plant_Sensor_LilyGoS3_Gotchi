@@ -24,14 +24,18 @@ int conductivity = 0;
 bool readFloraData() {
     NimBLEClient* pClient = NimBLEDevice::createClient();
     
+    pClient->setConnectTimeout(5);
+
     // Versuche zu verbinden
     if (!pClient->connect(floraAddress)) {
+        Serial.println("Fehler: Konnte nicht mit Mi Flora verbinden.");
         NimBLEDevice::deleteClient(pClient);
         return false;
     }
 
     NimBLERemoteService* pService = pClient->getService(serviceUUID);
     if (pService == nullptr) {
+        Serial.println("Fehler: Service UUID nicht gefunden.");
         pClient->disconnect();
         return false;
     }
@@ -43,6 +47,8 @@ bool readFloraData() {
         if (value.length() >= 1) {
             battery = value[0];
         }
+    } else {
+        Serial.println("Warnung: Konnte Batterie Characteristic nicht lesen.");
     }
 
     // 2. Sensormodus aufwecken (Magic Bytes senden)
@@ -50,6 +56,8 @@ bool readFloraData() {
     if (pModeChar != nullptr && pModeChar->canWrite()) {
         uint8_t magicBytes[2] = {0xA0, 0x1F};
         pModeChar->writeValue(magicBytes, 2, true);
+    } else {
+        Serial.println("Warnung: Konnte Magic Bytes nicht senden.");
     }
 
     // 3. Sensordaten lesen
@@ -61,7 +69,14 @@ bool readFloraData() {
             light = value[3] + value[4] * 256 + value[5] * 65536 + value[6] * 16777216;
             moisture = value[7];
             conductivity = value[8] + value[9] * 256;
+        } else {
+            Serial.println("Warnung: Daten von Sensor sind zu kurz.");
         }
+    } else {
+        Serial.println("Fehler: Konnte Sensor Daten Characteristic nicht lesen.");
+        pClient->disconnect();
+        NimBLEDevice::deleteClient(pClient);
+        return false;
     }
 
     // Verbindung sauber trennen
