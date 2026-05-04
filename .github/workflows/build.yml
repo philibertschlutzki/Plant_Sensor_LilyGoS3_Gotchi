@@ -32,11 +32,11 @@ jobs:
           mkdir release_files
           cp .pio/build/lilygo-t-display-s3/*.bin release_files/
           cd release_files
-          zip -j firmware_bundle.zip *.bin
+          zip -j LilyGo_Gotchi_Firmware.zip *.bin
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Release v1.0.${{ github.run_number }}
-          files: release_files/firmware_bundle.zip
+          files: release_files/LilyGo_Gotchi_Firmware.zip
