@@ -21,6 +21,8 @@ Ein batteriebetriebener Sensor, der direkt in die Blumenerde gesteckt wird. Er m
 * Temperatur (°C)
 * Lichtintensität (Lux)
 
+---
+
 ## 🚀 Installation & Nutzung
 
 Um das Projekt zu nutzen, musst du dem Display mitteilen, welchen Sensor es auslesen soll. Folge diesen 3 Schritten:
@@ -34,16 +36,17 @@ Der einfachste Weg, die Bluetooth-Adresse deines Sensors herauszufinden, ist üb
 4. Suche in der durchlaufenden Liste nach einem Gerät mit dem Namen **"Flower care"** oder **"Flower mate"**.
 5. Direkt unter oder neben diesem Namen siehst du eine Zeichenfolge, die ungefähr so aussieht: `C4:7C:8D:XX:XX:XX`. Das ist die gesuchte MAC-Adresse. **Notiere sie dir!**
 
-### Schritt 2: Code anpassen & kompilieren lassen
-Jetzt tragen wir diese Adresse in den Code ein.
-1. Öffne in diesem GitHub-Repository die Datei `src/main.cpp`.
+### Schritt 2: Code anpassen & Firmware herunterladen
+Jetzt tragen wir diese Adresse in den Code ein und lassen die Server von GitHub die Arbeit machen.
+
+1. Öffne auf der Startseite dieses GitHub-Repositories den Ordner `src` und klicke auf die Datei `main.cpp`.
 2. Klicke auf das Stift-Symbol (Bearbeiten) und ändere in **Zeile 7** die Adresse auf deine eigene:
    ```cpp
    static NimBLEAddress floraAddress("C4:7C:8D:12:34:56"); // Trage hier deine notierte Adresse ein
    ```
-3. Speichere die Datei ab (Commit changes).
-4. **Automatische Kompilierung:** Sobald du die Datei speicherst, startet im Hintergrund ein GitHub-Server, der dein Programm baut. Klicke oben in deinem Repository auf den Reiter **"Actions"**.
-5. Klicke auf den obersten, erfolgreichen Workflow-Lauf. Scrolle ganz nach unten zu **"Artifacts"** und lade die `LilyGo_Gotchi_Firmware.zip` herunter. Entpacke die ZIP-Datei auf deinem PC.
+3. Klicke oben rechts auf **Commit changes**, um die Datei zu speichern.
+4. **Automatische Kompilierung:** Sobald du speicherst, startet im Hintergrund die Kompilierung. Das dauert etwa 1 bis 2 Minuten.
+5. **Firmware laden:** Gehe zurück auf die Startseite dieses Repositories. Auf der **rechten Seite** findest du den Bereich **"Releases"**. Klicke dort auf die neueste Version (z. B. *Firmware Build #1*) und lade dir die angehängte Datei `LilyGo_Gotchi_Firmware.zip` herunter. Entpacke die ZIP-Datei auf deinem PC.
 
 ### Schritt 3: Firmware auf das Display flashen
 Du musst keine komplizierte Software auf deinem PC installieren. Wir nutzen einen Web-Browser (Google Chrome oder Microsoft Edge empfohlen):
