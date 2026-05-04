@@ -14,12 +14,16 @@ static NimBLEUUID uuid_version_batt("00001a02-0000-1000-8000-00805f9b34fb");
 static NimBLEUUID uuid_sensor_data("00001a01-0000-1000-8000-00805f9b34fb");
 static NimBLEUUID uuid_write_mode("00001a00-0000-1000-8000-00805f9b34fb");
 
-// Variablen für die Sensordaten
-int battery = 0;
-float temperature = 0.0;
-int moisture = 0;
-int light = 0;
-int conductivity = 0;
+// Struktur für die Sensordaten
+struct SensorData {
+    int battery = 0;
+    float temperature = 0.0;
+    int moisture = 0;
+    int light = 0;
+    int conductivity = 0;
+};
+
+SensorData sensorData;
 
 bool readFloraData() {
     NimBLEClient* pClient = NimBLEDevice::createClient();
@@ -45,7 +49,7 @@ bool readFloraData() {
     if (pBattChar != nullptr && pBattChar->canRead()) {
         std::string value = pBattChar->readValue();
         if (value.length() >= 1) {
-            battery = value[0];
+            sensorData.battery = (uint8_t)value[0];
         }
     } else {
         Serial.println("Warnung: Konnte Batterie Characteristic nicht lesen.");
@@ -65,10 +69,10 @@ bool readFloraData() {
     if (pDataChar != nullptr && pDataChar->canRead()) {
         std::string value = pDataChar->readValue();
         if (value.length() >= 16) {
-            temperature = (value[0] + value[1] * 256) / 10.0;
-            light = value[3] + value[4] * 256 + value[5] * 65536 + value[6] * 16777216;
-            moisture = value[7];
-            conductivity = value[8] + value[9] * 256;
+            sensorData.temperature = ((uint8_t)value[0] + (uint8_t)value[1] * 256) / 10.0;
+            sensorData.light = (uint8_t)value[3] + (uint8_t)value[4] * 256 + (uint8_t)value[5] * 65536 + (uint8_t)value[6] * 16777216;
+            sensorData.moisture = (uint8_t)value[7];
+            sensorData.conductivity = (uint8_t)value[8] + (uint8_t)value[9] * 256;
         } else {
             Serial.println("Warnung: Daten von Sensor sind zu kurz.");
         }
@@ -93,14 +97,24 @@ void updateDisplay(bool success) {
         tft.setTextColor(TFT_GREEN, TFT_BLACK);
         tft.drawString("Pflanzen Status", 10, 10, 4);
         
+        char buffer[32];
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.drawString("Temp:   " + String(temperature, 1) + " C", 10, 50, 4);
-        tft.drawString("Wasser: " + String(moisture) + " %", 10, 80, 4);
-        tft.drawString("Licht:  " + String(light) + " lx", 10, 110, 4);
-        tft.drawString("Duenger:" + String(conductivity) + " uS", 10, 140, 4);
+
+        snprintf(buffer, sizeof(buffer), "Temp:   %.1f C", sensorData.temperature);
+        tft.drawString(buffer, 10, 50, 4);
+
+        snprintf(buffer, sizeof(buffer), "Wasser: %d %%", sensorData.moisture);
+        tft.drawString(buffer, 10, 80, 4);
+
+        snprintf(buffer, sizeof(buffer), "Licht:  %d lx", sensorData.light);
+        tft.drawString(buffer, 10, 110, 4);
+
+        snprintf(buffer, sizeof(buffer), "Duenger:%d uS", sensorData.conductivity);
+        tft.drawString(buffer, 10, 140, 4);
         
         tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-        tft.drawString("Akku: " + String(battery) + " %", 10, 180, 2);
+        snprintf(buffer, sizeof(buffer), "Akku: %d %%", sensorData.battery);
+        tft.drawString(buffer, 10, 180, 2);
     } else {
         // Fehler bei der Verbindung
         tft.setTextColor(TFT_RED, TFT_BLACK);
@@ -132,9 +146,7 @@ void setup() {
 
     // Bluetooth initialisieren
     NimBLEDevice::init("LilyGo-Gotchi");
-}
 
-void loop() {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_YELLOW, TFT_BLACK);
     tft.drawString("Suche Sensor...", 10, 80, 4);
@@ -145,7 +157,18 @@ void loop() {
     // Display updaten
     updateDisplay(success);
     
-    // 30 Sekunden warten bis zur nächsten Aktualisierung. 
-    // Später kannst du das auf z.B. 10 Minuten (600000 ms) erhöhen, um Batterie zu sparen.
-    delay(30000); 
+    // 10 Sekunden warten, damit der Nutzer die Daten sehen kann
+    delay(10000);
+
+    // Display ausschalten
+    digitalWrite(38, LOW);
+    digitalWrite(15, LOW);
+
+    // Deep Sleep für 10 Minuten (600.000.000 Mikrosekunden)
+    esp_sleep_enable_timer_wakeup(600ULL * 1000000ULL);
+    esp_deep_sleep_start();
+}
+
+void loop() {
+    // Wird im Deep Sleep nicht erreicht
 }
