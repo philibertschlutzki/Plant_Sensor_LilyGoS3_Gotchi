@@ -28,8 +28,8 @@ jobs:
         # WICHTIG: buildfs erzeugt das LittleFS-Image (index.html, etc.)
         # Danach baut pio run die Firmware und triggert das Merge-Skript
         run: |
-          pio run -t buildfs
-          pio run
+          pio run -t buildfs -e lilygo-t-display-s3
+          pio run -e lilygo-t-display-s3
 
       - name: Package Firmware
         run: |
