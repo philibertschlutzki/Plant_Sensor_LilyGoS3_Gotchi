@@ -25,8 +25,8 @@ jobs:
           pip install --upgrade platformio
 
       - name: Compile Firmware & Filesystem
-        # Baut zuerst das LittleFS-Dateisystem (inkl. Frontend) und 
-        # führt dann den Haupt-Build inkl. Python-Zusatzskripten aus.
+        # WICHTIG: buildfs erzeugt das LittleFS-Image (index.html, etc.)
+        # Danach baut pio run die Firmware und triggert das Merge-Skript
         run: |
           pio run -t buildfs
           pio run
@@ -34,7 +34,7 @@ jobs:
       - name: Package Firmware
         run: |
           mkdir release_files
-          # Wir kopieren NUR die neue, sichere Merged-Datei in den Release-Ordner
+          # Die vom Skript build_merged_bin.py erzeugte Datei kopieren
           cp LilyGo_Gotchi_Full_Merged.bin release_files/
           cd release_files
           zip -j LilyGo_Gotchi_Firmware.zip LilyGo_Gotchi_Full_Merged.bin
