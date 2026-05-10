@@ -12,8 +12,12 @@
 #include "time.h"
 #include "xbms.h"
 #include "animations.h"
+#include <esp_task_wdt.h>
+#include <esp_wifi.h>
+#include <ElegantOTA.h>
 
 Preferences preferences;
+SemaphoreHandle_t dataMutex;
 AsyncWebServer server(80);
 String ntfyTopic = "ntfy.sh/mein_gotchi_geheim_123"; // default fallback
 
@@ -21,8 +25,8 @@ bool isBLEScanning = false;
 bool requestTestPush = false;
 bool pushSent_Moisture[3] = {false, false, false};
 bool pushSent_Temp[3] = {false, false, false};
-
-
+bool isOffline[3] = {false, false, false};
+bool pushSent_Offline[3] = {false, false, false};
 
 void drawUI();
 void drawTamagotchiUI();
@@ -53,9 +57,16 @@ struct PlantProfile {
     int maxLight;
     int minConductivity;
     int maxConductivity;
+    int moistureOffset;
 };
 
 PlantProfile profiles[3];
+
+// Global Settings
+String nightModeStart = "22:00";
+String nightModeEnd = "07:00";
+int extBatPin = 1;
+float extBatDivider = 2.0;
 
 struct PlantData {
     int battery;
@@ -65,6 +76,17 @@ struct PlantData {
     int conductivity;
     unsigned long lastUpdate;
 };
+
+struct LogEntry {
+    uint32_t timestamp;
+    uint8_t plantIdx;
+    float temp;
+    uint8_t moist;
+    uint16_t light;
+    uint16_t cond;
+} __attribute__((packed));
+
+const int MAX_LOG_ENTRIES = (50000 - sizeof(uint32_t)) / sizeof(LogEntry); // Max entries to keep file around ~50KB
 
 PlantData cachedData[3] = {
     {0, 0.0, 0, 0, 0, 0},
@@ -79,6 +101,9 @@ unsigned long lastBlePoll = 0;
 unsigned long lastAutoCycle = 0;
 const unsigned long BLE_POLL_INTERVAL = 3600000UL; // 60 minutes
 const unsigned long AUTO_CYCLE_INTERVAL = 10000UL; // 10 seconds
+
+// Dimming State
+unsigned long lastInteractionTime = 0;
 
 // Button state
 const int BUTTON_PIN = 0;
@@ -96,23 +121,27 @@ unsigned long buttonModePressTime = 0;
 
 unsigned long debounceDelay = 50;
 
-bool tamagotchiMode = true;
+int uiMode = 0; // 0 = Tamagotchi, 1 = Technical, 2 = Battery
 unsigned long lastAnimUpdate = 0;
 int currentFrame = 0;
 
+void drawBatteryUI();
+
 void drawUI() {
-    if (tamagotchiMode) {
+    if (uiMode == 0) {
         drawTamagotchiUI();
-    } else {
+    } else if (uiMode == 1) {
         drawTechnicalUI();
+    } else {
+        drawBatteryUI();
     }
 }
 
 void drawTamagotchiUI() {
-    tft.fillScreen(TFT_BLACK);
-
     PlantProfile p = profiles[currentPlantIndex];
+    xSemaphoreTake(dataMutex, portMAX_DELAY);
     PlantData d = cachedData[currentPlantIndex];
+    xSemaphoreGive(dataMutex);
 
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.drawCentreString(p.name, 160, 10, 4);
@@ -138,17 +167,23 @@ void drawTamagotchiUI() {
     const uint16_t* frameToDraw = ghost_idle_frame1;
 
     // Select animation based on status
-    if (allOk) {
-        frameToDraw = (currentFrame == 0) ? ghost_happy_frame1 : ghost_happy_frame2;
-    } else if (tempLow) {
-        frameToDraw = (currentFrame == 0) ? ghost_freeze_frame1 : ghost_freeze_frame2;
-    } else if (moistLow) {
-        frameToDraw = (currentFrame == 0) ? ghost_sweat_frame1 : ghost_sweat_frame2;
-    } else if (tempHigh || moistHigh || !lightOk || !condOk) {
-        frameToDraw = (currentFrame == 0) ? ghost_sad_frame1 : ghost_sad_frame2;
-    }
+    if (isOffline[currentPlantIndex]) {
+        tft.fillRect(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, TFT_BLACK);
+        tft.setTextColor(TFT_RED, TFT_BLACK);
+        tft.drawCentreString("Sensor Offline", 160, ghostY + 30, 4);
+    } else {
+        if (allOk) {
+            frameToDraw = (currentFrame == 0) ? ghost_happy_frame1 : ghost_happy_frame2;
+        } else if (tempLow) {
+            frameToDraw = (currentFrame == 0) ? ghost_freeze_frame1 : ghost_freeze_frame2;
+        } else if (moistLow) {
+            frameToDraw = (currentFrame == 0) ? ghost_sweat_frame1 : ghost_sweat_frame2;
+        } else if (tempHigh || moistHigh || !lightOk || !condOk) {
+            frameToDraw = (currentFrame == 0) ? ghost_sad_frame1 : ghost_sad_frame2;
+        }
 
-    tft.pushImage(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, frameToDraw);
+        tft.pushImage(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, frameToDraw);
+    }
 
     // Draw visual bars instead of numbers
     int barY = 120;
@@ -206,10 +241,10 @@ void drawTamagotchiUI() {
 }
 
 void drawTechnicalUI() {
-    tft.fillScreen(TFT_BLACK);
-
     PlantProfile p = profiles[currentPlantIndex];
+    xSemaphoreTake(dataMutex, portMAX_DELAY);
     PlantData d = cachedData[currentPlantIndex];
+    xSemaphoreGive(dataMutex);
 
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.drawCentreString(p.name, 160, 10, 4);
@@ -290,6 +325,41 @@ void drawTechnicalUI() {
     }
 }
 
+void drawBatteryUI() {
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawCentreString("Batterie Status", 160, 10, 4);
+
+    char buffer[64];
+
+    // Internal Battery
+    float internalVoltage = (analogRead(4) / 4095.0) * 2.0 * 3.3;
+    float internalPercent = constrain(map(internalVoltage * 100, 330, 420, 0, 100), 0, 100);
+    snprintf(buffer, sizeof(buffer), "Intern: %.2fV (%.0f%%)", internalVoltage, internalPercent);
+    tft.drawString(buffer, 10, 60, 4);
+
+    // External Battery
+    float extVoltage = (analogRead(extBatPin) / 4095.0) * 3.3 * extBatDivider;
+    float extPercent = constrain(map(extVoltage * 100, 330, 420, 0, 100), 0, 100); // Assuming LiPo range, adapt if needed
+    snprintf(buffer, sizeof(buffer), "Extern: %.2fV (%.0f%%)", extVoltage, extPercent);
+    tft.drawString(buffer, 10, 100, 4);
+
+    // Pagination
+    int dotSpace = 15;
+    int startX = 160 - dotSpace;
+    for (int i=0; i<3; i++) {
+        if (i == currentPlantIndex) {
+            // Fill circle for active plant
+            tft.fillCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
+            // Indicate UI view below the active plant dot
+            tft.drawRect(startX + i*dotSpace - 4, 218, 2, 2, TFT_WHITE);
+            tft.drawRect(startX + i*dotSpace, 218, 2, 2, TFT_WHITE);
+            tft.drawRect(startX + i*dotSpace + 4, 218, 2, 2, TFT_WHITE);
+        } else {
+            tft.drawCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
+        }
+    }
+}
+
 bool readFloraData(int index) {
     if (!profiles[index].active || profiles[index].mac.indexOf("XX:XX") != -1) {
         return false;
@@ -332,11 +402,18 @@ bool readFloraData(int index) {
     if (pDataChar != nullptr && pDataChar->canRead()) {
         std::string value = pDataChar->readValue();
         if (value.length() >= 16) {
+            int raw_moisture = (uint8_t)value[7];
+            int calibrated = raw_moisture + profiles[index].moistureOffset;
+
+            xSemaphoreTake(dataMutex, portMAX_DELAY);
             cachedData[index].temperature = ((uint8_t)value[0] + (uint8_t)value[1] * 256) / 10.0;
             cachedData[index].light = (uint8_t)value[3] + (uint8_t)value[4] * 256 + (uint8_t)value[5] * 65536 + (uint8_t)value[6] * 16777216;
-            cachedData[index].moisture = (uint8_t)value[7];
+            cachedData[index].moisture = constrain(calibrated, 0, 100);
             cachedData[index].conductivity = (uint8_t)value[8] + (uint8_t)value[9] * 256;
             cachedData[index].lastUpdate = millis();
+            isOffline[index] = false;
+            pushSent_Offline[index] = false;
+            xSemaphoreGive(dataMutex);
         }
     }
 
@@ -364,22 +441,71 @@ void pollBLE() {
     drawUI(); // Refresh UI after polling
 
     logData();
+
+    // Check if offline
+    for (int i=0; i<3; i++) {
+        xSemaphoreTake(dataMutex, portMAX_DELAY);
+        PlantData d = cachedData[i];
+        xSemaphoreGive(dataMutex);
+
+        if (d.lastUpdate > 0 && millis() - d.lastUpdate > 21600000) {
+            isOffline[i] = true;
+            if (!pushSent_Offline[i] && profiles[i].active) {
+                // We'll queue the offline notification by just calling checkAndSendNotifications which handles it.
+            }
+        }
+    }
+
     checkAndSendNotifications();
 
     isBLEScanning = false;
 }
 
+void bleTaskFunc(void* parameter) {
+    esp_task_wdt_add(NULL);
+    for (;;) {
+        esp_task_wdt_reset();
+        if (millis() - lastBlePoll >= BLE_POLL_INTERVAL) {
+            pollBLE();
+        }
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
 void setup() {
     Serial.begin(115200);
+
+    dataMutex = xSemaphoreCreateMutex();
     
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(BUTTON_PIN_MODE, INPUT_PULLUP);
 
+    // Hard Factory Reset Check
+    int resetCounter = 0;
+    while(digitalRead(BUTTON_PIN) == LOW) {
+        resetCounter++;
+        Serial.printf("Holding reset... %d00ms\n", resetCounter);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        if (resetCounter > 100) {
+            Serial.println("Factory Reset Triggered!");
+            LittleFS.begin(true);
+            LittleFS.format();
+            WiFiManager wm;
+            wm.resetSettings();
+            Preferences prefs;
+            prefs.begin("gotchi", false);
+            prefs.clear();
+            ESP.restart();
+        }
+    }
+
     pinMode(15, OUTPUT);
     digitalWrite(15, HIGH);
     
-    pinMode(38, OUTPUT);
-    digitalWrite(38, HIGH);
+    // PWM Dimming Setup for Backlight
+    ledcSetup(0, 5000, 8);
+    ledcAttachPin(38, 0);
+    ledcWrite(0, 255);
     
 
     tft.init();
@@ -392,15 +518,20 @@ void setup() {
     if (!LittleFS.begin(true)) {
         Serial.println("LittleFS Mount Failed");
     } else {
-        if (!LittleFS.exists("/log.csv")) {
-            File f = LittleFS.open("/log.csv", "w");
+        if (!LittleFS.exists("/log.bin")) {
+            File f = LittleFS.open("/log.bin", "w");
             if (f) {
-                f.println("timestamp,plantIndex,temp,moisture,light,conductivity");
+                uint32_t initialHead = 0;
+                f.write((const uint8_t*)&initialHead, sizeof(initialHead));
                 f.close();
             }
         }
         loadConfig();
     }
+
+    // Hardware Watchdog
+    esp_task_wdt_init(30, true);
+    esp_task_wdt_add(NULL); // Add loopTask (Core 1) to WDT
 
     // Preferences & WiFiManager
     preferences.begin("gotchi", false);
@@ -423,6 +554,8 @@ void setup() {
 
         tft.drawString("WLAN: Verbunden!", 10, 120, 2);
 
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+
         // Save topic if changed
         if (String(custom_ntfy_topic.getValue()) != ntfyTopic && String(custom_ntfy_topic.getValue()).length() > 0) {
             ntfyTopic = custom_ntfy_topic.getValue();
@@ -431,7 +564,7 @@ void setup() {
     }
 
     // NTP
-    configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "ch.pool.ntp.org");
+    configTzTime(preferences.getString("tz", "CET-1CEST,M3.5.0,M10.5.0/3").c_str(), "pool.ntp.org");
 
     // WebServer Endpoints
     server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
@@ -462,31 +595,26 @@ void setup() {
             return;
         }
 
-        File f = LittleFS.open("/log.csv", "r");
+        File f = LittleFS.open("/log.bin", "r");
         if (!f) {
             request->send(404, "text/plain", "No data");
             return;
         }
 
-        // Read CSV and convert to JSON
         JsonDocument doc;
         JsonArray array = doc.to<JsonArray>();
 
-        f.readStringUntil('\n'); // skip header
-        while(f.available()) {
-            String line = f.readStringUntil('\n');
-            if (line.length() > 0) {
-                int firstComma = line.indexOf(',');
-                int secondComma = line.indexOf(',', firstComma+1);
-                int thirdComma = line.indexOf(',', secondComma+1);
+        // Skip head index
+        f.seek(sizeof(uint32_t));
 
-                if (firstComma > 0 && secondComma > 0 && thirdComma > 0) {
+        while(f.available()) {
+            LogEntry entry;
+            if (f.read((uint8_t*)&entry, sizeof(LogEntry)) == sizeof(LogEntry)) {
+                if (entry.timestamp > 0) {
                     JsonObject obj = array.add<JsonObject>();
-                    obj["t"] = line.substring(0, firstComma).toInt();
-                    obj["i"] = line.substring(firstComma+1, secondComma).toInt();
-                    // We only chart moisture for now to save RAM
-                    int moistureComma = line.indexOf(',', thirdComma+1);
-                    obj["m"] = line.substring(thirdComma+1, moistureComma).toInt();
+                    obj["t"] = entry.timestamp;
+                    obj["i"] = entry.plantIdx;
+                    obj["m"] = entry.moist;
                 }
             }
         }
@@ -495,6 +623,63 @@ void setup() {
         String response;
         serializeJson(doc, response);
         request->send(200, "application/json", response);
+    });
+
+    server.on("/api/export", HTTP_GET, [](AsyncWebServerRequest *request){
+        if (isBLEScanning) {
+            request->send(503, "text/plain", "Busy");
+            return;
+        }
+
+        AsyncWebServerResponse *response = request->beginChunkedResponse("text/csv", [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+            static File f;
+            if (index == 0) {
+                f = LittleFS.open("/log.bin", "r");
+                if (!f) return 0;
+                // Skip head
+                f.seek(sizeof(uint32_t));
+
+                String header = "timestamp,plantIndex,temp,moisture,light,conductivity\n";
+                if (maxLen > header.length()) {
+                    memcpy(buffer, header.c_str(), header.length());
+                    return header.length();
+                }
+            }
+
+            if (!f || !f.available()) {
+                if (f) f.close();
+                return 0;
+            }
+
+            size_t bytesWritten = 0;
+            char lineBuf[128];
+            while (f.available() && maxLen - bytesWritten > sizeof(lineBuf)) {
+                LogEntry entry;
+                if (f.read((uint8_t*)&entry, sizeof(LogEntry)) == sizeof(LogEntry)) {
+                    if (entry.timestamp > 0) {
+                        int len = snprintf(lineBuf, sizeof(lineBuf), "%u,%u,%.1f,%u,%u,%u\n",
+                                           entry.timestamp, entry.plantIdx, entry.temp, entry.moist, entry.light, entry.cond);
+                        if (maxLen - bytesWritten >= len) {
+                            memcpy(buffer + bytesWritten, lineBuf, len);
+                            bytesWritten += len;
+                        } else {
+                            // Back up file pointer, we can't fit this
+                            f.seek(f.position() - sizeof(LogEntry));
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!f.available()) {
+                f.close();
+            }
+
+            return bytesWritten;
+        });
+
+        response->addHeader("Content-Disposition", "attachment; filename=\"gotchi_history.csv\"");
+        request->send(response);
     });
 
     server.on("/api/push_test", HTTP_POST, [](AsyncWebServerRequest *request){
@@ -552,6 +737,8 @@ void setup() {
         }
     });
 
+    ElegantOTA.begin(&server);
+
     server.begin();
 
 
@@ -563,15 +750,27 @@ void setup() {
     
     // If the initial poll failed (lastUpdate remains 0), we still draw UI
     drawUI();
+
+    xTaskCreatePinnedToCore(
+        bleTaskFunc,
+        "bleTask",
+        4096,
+        NULL,
+        1,
+        NULL,
+        0
+    );
 }
 
 void loop() {
+    esp_task_wdt_reset();
     unsigned long currentMillis = millis();
 
     static unsigned long lastWiFiCheck = 0;
-    if (currentMillis - lastWiFiCheck >= 20000) {
+    if (currentMillis - lastWiFiCheck >= 10000) {
         lastWiFiCheck = currentMillis;
         if (WiFi.status() != WL_CONNECTED) {
+            WiFi.disconnect();
             WiFi.reconnect();
         }
     }
@@ -581,11 +780,19 @@ void loop() {
         checkAndSendNotifications(true);
     }
 
+    // BLE Polling is now handled by bleTask
 
-    // BLE Polling (non-blocking in loop, but polling itself blocks for a few secs)
-    // Avoid checking right after boot as lastBlePoll is set in setup()
-    if (currentMillis - lastBlePoll >= BLE_POLL_INTERVAL) {
-        pollBLE();
+
+    // Dimming Logic
+    unsigned long timeSinceInteraction = currentMillis - lastInteractionTime;
+    if (timeSinceInteraction < 60000) {
+        ledcWrite(0, 255);
+    } else if (timeSinceInteraction >= 60000 && timeSinceInteraction < 120000) {
+        // Fade from 255 to 50 over 60 seconds
+        int fadeValue = map(timeSinceInteraction, 60000, 120000, 255, 50);
+        ledcWrite(0, constrain(fadeValue, 50, 255));
+    } else {
+        ledcWrite(0, 0);
     }
 
     // Auto Cycle Logic
@@ -598,7 +805,7 @@ void loop() {
     }
 
     // Animation Logic
-    if (tamagotchiMode && (currentMillis - lastAnimUpdate > 500)) { // 500ms per frame
+    if (uiMode == 0 && (currentMillis - lastAnimUpdate > 500)) { // 500ms per frame
         currentFrame = (currentFrame + 1) % 2;
         lastAnimUpdate = currentMillis;
 
@@ -645,6 +852,7 @@ void loop() {
             if (buttonState == LOW) {
                 // Button pressed
                 buttonPressTime = currentMillis;
+                lastInteractionTime = currentMillis;
             } else {
                 // Button released
                 unsigned long pressDuration = currentMillis - buttonPressTime;
@@ -680,13 +888,15 @@ void loop() {
             if (buttonModeState == LOW) {
                 // Button pressed
                 buttonModePressTime = currentMillis;
+                lastInteractionTime = currentMillis;
             } else {
                 // Button released
                 unsigned long pressDuration = currentMillis - buttonModePressTime;
 
                 if (pressDuration < 500) {
                     // Short press
-                    tamagotchiMode = !tamagotchiMode;
+                    uiMode = (uiMode + 1) % 3;
+                    tft.fillScreen(TFT_BLACK);
                     drawUI();
                 }
             }
@@ -700,47 +910,46 @@ void logData() {
     time_t now;
     time(&now);
 
-    // Check file size for ring buffer
-    File f = LittleFS.open("/log.csv", "r");
-    if (f && f.size() > 50000) { // Limit to ~50KB
-        // Read lines, skip first ~20%, write back to temporary file
-        File newF = LittleFS.open("/log_temp.csv", "w");
-        if (newF) {
-            newF.println("timestamp,plantIndex,temp,moisture,light,conductivity");
-
-            f.readStringUntil('\n'); // skip old header
-
-            int linesToSkip = 50; // Skip 50 entries
-            while(linesToSkip > 0 && f.available()) {
-                f.readStringUntil('\n');
-                linesToSkip--;
-            }
-
-            while(f.available()) {
-                newF.print(f.readStringUntil('\n') + "\n");
-            }
-            newF.close();
-        }
-        f.close();
-        LittleFS.remove("/log.csv");
-        LittleFS.rename("/log_temp.csv", "/log.csv");
-    } else if (f) {
-        f.close();
+    if (now < 1000000000) {
+        return; // NTP not synced yet
     }
 
-    f = LittleFS.open("/log.csv", "a");
-    if (f) {
-        for(int i=0; i<3; i++) {
-            PlantData d = cachedData[i];
-            if (d.lastUpdate > 0) { // Only log if we have data
-                char buffer[128];
-                snprintf(buffer, sizeof(buffer), "%ld,%d,%.1f,%d,%d,%d",
-                    (long)now, i, d.temperature, d.moisture, d.light, d.conductivity);
-                f.println(buffer);
+    File f = LittleFS.open("/log.bin", "r+");
+    if (!f) {
+        return;
+    }
+
+    uint32_t headIndex = 0;
+    f.read((uint8_t*)&headIndex, sizeof(headIndex));
+
+    for (int i=0; i<3; i++) {
+        xSemaphoreTake(dataMutex, portMAX_DELAY);
+        PlantData d = cachedData[i];
+        xSemaphoreGive(dataMutex);
+
+        if (d.lastUpdate > 0) {
+            LogEntry entry;
+            entry.timestamp = (uint32_t)now;
+            entry.plantIdx = i;
+            entry.temp = d.temperature;
+            entry.moist = d.moisture;
+            entry.light = d.light;
+            entry.cond = d.conductivity;
+
+            f.seek(sizeof(uint32_t) + (headIndex * sizeof(LogEntry)));
+            f.write((const uint8_t*)&entry, sizeof(LogEntry));
+
+            headIndex++;
+            if (headIndex >= MAX_LOG_ENTRIES) {
+                headIndex = 0;
             }
         }
-        f.close();
     }
+
+    // Update head
+    f.seek(0);
+    f.write((const uint8_t*)&headIndex, sizeof(headIndex));
+    f.close();
 }
 
 void checkAndSendNotifications(bool testPush) {
@@ -761,6 +970,17 @@ void checkAndSendNotifications(bool testPush) {
         bool moistLow = d.moisture < p.minMoisture;
         bool moistOk = d.moisture >= p.minMoisture && d.moisture <= p.maxMoisture;
 
+        if (isOffline[i] && !pushSent_Offline[i]) {
+            HTTPClient http;
+            http.begin(ntfyTopic);
+            http.addHeader("Title", String(p.name) + " ist Offline!");
+            http.addHeader("Tags", "warning");
+            String msg = String(p.name) + " hat sich seit über 6 Stunden nicht gemeldet.";
+            http.POST(msg);
+            http.end();
+            pushSent_Offline[i] = true;
+        }
+
         if ((moistLow && !pushSent_Moisture[i]) || testPush) {
             HTTPClient http;
             http.begin(ntfyTopic);
@@ -770,6 +990,32 @@ void checkAndSendNotifications(bool testPush) {
             http.POST(msg);
             http.end();
             pushSent_Moisture[i] = true;
+
+            // Wake up display on push, unless in night mode
+            struct tm timeinfo;
+            if (getLocalTime(&timeinfo)) {
+                int currentMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
+                int startHour = nightModeStart.substring(0, 2).toInt();
+                int startMin = nightModeStart.substring(3, 5).toInt();
+                int endHour = nightModeEnd.substring(0, 2).toInt();
+                int endMin = nightModeEnd.substring(3, 5).toInt();
+
+                int startMins = startHour * 60 + startMin;
+                int endMins = endHour * 60 + endMin;
+
+                bool inNightMode = false;
+                if (startMins <= endMins) {
+                    if (currentMins >= startMins && currentMins <= endMins) inNightMode = true;
+                } else {
+                    if (currentMins >= startMins || currentMins <= endMins) inNightMode = true;
+                }
+
+                if (!inNightMode) {
+                    lastInteractionTime = millis();
+                }
+            } else {
+                lastInteractionTime = millis(); // Fallback if no time
+            }
         } else if (moistOk && pushSent_Moisture[i]) {
             pushSent_Moisture[i] = false;
         }
