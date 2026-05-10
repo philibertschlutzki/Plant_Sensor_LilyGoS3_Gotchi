@@ -680,6 +680,7 @@ void setup() {
         });
 
         response->addHeader("Content-Disposition", "attachment; filename=\"gotchi_history.csv\"");
+        response->onDisconnect([](){ isExporting = false; }); // <--- DIESE ZEILE FEHLT
         request->send(response);
     });
 
