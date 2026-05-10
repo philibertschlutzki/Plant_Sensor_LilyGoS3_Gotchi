@@ -177,12 +177,36 @@
                 const data = await res.json();
                 let html = '';
                 data.forEach((d, i) => {
+                    let moistureAlert = "🟢 Wasser OK";
+                    let lightAlert = "🟢 Licht OK";
+                    let profile = configData.profiles[i];
+
+                    if (profile) {
+                        if (d.moisture < profile.minMoisture) {
+                            moistureAlert = `<div class='alert-red' style='color: #e74c3c; font-weight: bold;'>🔴 Zu trocken! Bitte gießen (ca. 200ml)</div>`;
+                        } else if (d.moisture > profile.maxMoisture) {
+                            moistureAlert = `<div class='alert-red' style='color: #e74c3c; font-weight: bold;'>🔴 Zu nass!</div>`;
+                        } else {
+                            moistureAlert = `<div class='alert-green' style='color: #27ae60;'>🟢 Wasser OK</div>`;
+                        }
+
+                        if (d.light < profile.minLight) {
+                            lightAlert = `<div class='alert-yellow' style='color: #f39c12; font-weight: bold;'>🟡 Zu dunkel! Pflanze näher ans Fenster stellen.</div>`;
+                        } else if (d.light > profile.maxLight) {
+                            lightAlert = `<div class='alert-yellow' style='color: #f39c12; font-weight: bold;'>🟡 Zu hell!</div>`;
+                        } else {
+                            lightAlert = `<div class='alert-green' style='color: #27ae60;'>🟢 Licht OK</div>`;
+                        }
+                    }
+
                     html += `
                         <div class="card">
                             <h3>${plantNames[i]}</h3>
                             <p>💧 ${d.moisture} %</p>
+                            ${moistureAlert}
                             <p>🌡️ ${d.temperature} °C</p>
                             <p>☀️ ${d.light} lx</p>
+                            ${lightAlert}
                             <p>🧪 ${d.conductivity} µS</p>
                             <small>🔋 ${d.battery}%</small>
                         </div>
