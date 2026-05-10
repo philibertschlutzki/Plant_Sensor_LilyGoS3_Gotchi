@@ -28,14 +28,6 @@ Um dem Gotchi zu sagen, mit welchem Sensor es sprechen soll, brauchst du die sog
 
 ---
 
-Basierend auf der Analyse deines Repositories wird die Firmware durch die GitHub Actions (`.github/workflows/build.yml`) automatisch kompiliert. Die Action sammelt alle `.bin`-Dateien aus dem Build-Ordner, verpackt sie in ein Archiv namens `LilyGo_Gotchi_Firmware.zip` und veröffentlicht diese als neues Release.
-
-Dadurch können Nutzer einfach die ZIP-Datei herunterladen und über einen Chromium-basierten Browser (via Web Serial API) flashen, ohne VS Code oder PlatformIO installieren zu müssen.
-
-Hier ist der angepasste Abschnitt für deine Anleitung:
-
----
-
 ### 💻 Installation (Upload auf das Display)
 
 Damit das Gotchi funktioniert, müssen zwei Dinge auf das LILYGO T-Display-S3 übertragen (geflasht) werden:
