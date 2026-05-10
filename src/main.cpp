@@ -514,6 +514,7 @@ void setup() {
     if (!LittleFS.begin(true)) {
         Serial.println("LittleFS Mount Failed");
     } else {
+        Serial.printf("LittleFS total=%u used=%u\n", LittleFS.totalBytes(), LittleFS.usedBytes());
         if (!LittleFS.exists("/log.bin")) {
             File f = LittleFS.open("/log.bin", "w");
             if (f) {
@@ -563,6 +564,43 @@ void setup() {
     configTzTime(preferences.getString("tz", "CET-1CEST,M3.5.0,M10.5.0/3").c_str(), "pool.ntp.org");
 
     // WebServer Endpoints
+
+    // Diagnose-Endpoint: LittleFS-Status + Dateiprüfung
+    server.on("/diag/fs", HTTP_GET, [](AsyncWebServerRequest *request){
+        String out;
+
+        out += "LittleFS total: " + String(LittleFS.totalBytes()) +
+               " used: " + String(LittleFS.usedBytes()) + "\n";
+
+        auto checkFile = [&](const char* path){
+            out += String(path) + ": ";
+            if (!LittleFS.exists(path)) {
+                out += "NOT EXISTS\n";
+                return;
+            }
+            File f = LittleFS.open(path, "r");
+            if (!f) {
+                out += "exists but open FAILED\n";
+                return;
+            }
+            out += "size=" + String(f.size()) + "\n";
+            f.close();
+        };
+
+        checkFile("/index.html");
+        checkFile("/chart.min.js");
+        checkFile("/config.json");
+        checkFile("/log.bin");
+
+        request->send(200, "text/plain", out);
+    });
+
+    // Einfacher HTTP-Smoke-Test
+    server.on("/test", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "OK");
+    });
+
+    // Static Files (UI)
     server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
     server.on("/api/live", HTTP_GET, [](AsyncWebServerRequest *request){
