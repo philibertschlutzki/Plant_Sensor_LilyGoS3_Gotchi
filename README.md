@@ -45,19 +45,14 @@ Dank unserer automatischen Bereitstellung kannst du das Gotchi ganz einfach dire
 
 **Schritt-für-Schritt Anleitung:**
 
-1. **Dateien herunterladen:** Gehe auf der GitHub-Seite dieses Projekts rechts auf **"Releases"** und lade dir unter der neuesten Version die Datei `LilyGo_Gotchi_Firmware.zip` herunter.
-2. **Entpacken:** Entpacke die ZIP-Datei auf deinem Computer. Darin befinden sich mehrere `.bin` Dateien.
-3. **Web-Flasher öffnen:** Öffne in deinem Browser das offizielle Flash-Tool von Espressif: [https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/)
-4. **Verbinden:** Schließe dein LILYGO T-Display-S3 per USB an den PC an. Klicke auf der Webseite auf den Button **"Connect"** und wähle im aufklappenden Fenster den passenden USB-Port deines Displays aus.
-5. **Dateien zuweisen:** Nun musst du die entpackten `.bin` Dateien in das Tool laden und ihnen die richtigen Speicheradressen (Offsets) zuweisen. Trage die folgenden Werte ein (über "Add File" kannst du weitere Zeilen hinzufügen):
-* `bootloader.bin` ➔ Flash Address: `0x0`
-* `partitions.bin` ➔ Flash Address: `0x8000`
-* `firmware.bin` ➔ Flash Address: `0x10000`
-* `littlefs.bin` ➔ Flash Address: `0x310000` *(Adresse kann je nach exakter Partitionstabelle abweichen)*
+1. **Datei herunterladen:** Gehe auf der GitHub-Seite dieses Projekts rechts auf **"Releases"** und lade dir unter der neuesten Version die Datei `LilyGo_Gotchi_Full_Merged.bin` herunter.
+2. **Web-Flasher öffnen:** Öffne in deinem Browser das offizielle Flash-Tool von Espressif: [https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/)
+3. **Verbinden:** Schließe dein LILYGO T-Display-S3 per USB an den PC an. Klicke auf der Webseite auf den Button **"Connect"** und wähle im aufklappenden Fenster den passenden USB-Port deines Displays aus.
+4. **Datei zuweisen:** Lade die heruntergeladene Datei in das Tool und weise ihr die folgende Speicheradresse (Offset) zu:
+* `LilyGo_Gotchi_Full_Merged.bin` ➔ Flash Address: `0x0`
 
-
-6. **Flashen:** Klicke unten auf **"Program"**. Der Fortschrittsbalken zeigt dir an, wie die Daten übertragen werden.
-7. **Neustart**: Wenn der Balken 100% erreicht hat und der Erfolgs-Dialog erscheint, versucht das Tool oft einen automatischen Neustart ("Hard resetting via RTS pin..."). Das Display sollte nun das Gotchi-Setup anzeigen. Falls der Bildschirm dunkel bleibt oder nicht reagiert, drücke einfach kurz den Reset-Knopf an der Seite deines LILYGO Displays, um es manuell neu zu starten.
+5. **Flashen:** Klicke unten auf **"Program"**. Der Fortschrittsbalken zeigt dir an, wie die Daten übertragen werden.
+6. **Neustart**: Wenn der Balken 100% erreicht hat und der Erfolgs-Dialog erscheint, versucht das Tool oft einen automatischen Neustart ("Hard resetting via RTS pin..."). Das Display sollte nun das Gotchi-Setup anzeigen. Falls der Bildschirm dunkel bleibt oder nicht reagiert, drücke einfach kurz den Reset-Knopf an der Seite deines LILYGO Displays, um es manuell neu zu starten.
 ---
 
 ## 🌐 Erster Start (WLAN & ntfy.sh einrichten)
