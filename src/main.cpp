@@ -630,14 +630,14 @@ void setup() {
             request->send(503, "text/plain", "Busy");
             return;
         }
-        isExporting = true; // Sperre setzen
+        isExporting = true;
 
         AsyncWebServerResponse *response = request->beginChunkedResponse("text/csv", [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
             static File f;
             if (index == 0) {
                 f = LittleFS.open("/log.bin", "r");
                 if (!f) {
-                    isExporting = false; // Sperre lösen falls Datei nicht öffenbar
+                    isExporting = false; 
                     return 0;
                 }
                 f.seek(sizeof(uint32_t));
@@ -650,7 +650,7 @@ void setup() {
 
             if (!f || !f.available()) {
                 if (f) f.close();
-                isExporting = false; // Sperre lösen wenn Fertig
+                isExporting = false; // Flag hier zurücksetzen, wenn fertig
                 return 0;
             }
 
@@ -676,8 +676,6 @@ void setup() {
         });
 
         response->addHeader("Content-Disposition", "attachment; filename=\"gotchi_history.csv\"");
-        // Sperre auch bei vorzeitigem Verbindungsabbruch lösen:
-        response->onDisconnect([](){ isExporting = false; }); 
         request->send(response);
     });
 
