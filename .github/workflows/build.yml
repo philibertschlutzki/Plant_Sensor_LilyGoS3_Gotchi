@@ -24,10 +24,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
-      - name: Compile Firmware
-        # Dieser Befehl baut den Code und führt automatisch deine Python-Skripte 
-        # (Chart.js Download & Merged-Bin Erstellung) aus.
-        run: pio run
+      - name: Compile Firmware & Filesystem
+        # Baut zuerst das LittleFS-Dateisystem (inkl. Frontend) und 
+        # führt dann den Haupt-Build inkl. Python-Zusatzskripten aus.
+        run: |
+          pio run -t buildfs
+          pio run
 
       - name: Package Firmware
         run: |
