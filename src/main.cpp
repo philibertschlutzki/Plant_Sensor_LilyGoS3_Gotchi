@@ -23,6 +23,7 @@ String ntfyTopic = "ntfy.sh/mein_gotchi_geheim_123"; // default fallback
 volatile bool isBLEScanning = false;
 volatile bool requestTestPush = false;
 volatile bool requestUIDraw = false;
+volatile bool isExporting = false;
 volatile bool requestLogData = false;
 bool pushSent_Moisture[3] = {false, false, false};
 bool pushSent_Temp[3] = {false, false, false};
