@@ -21,6 +21,7 @@ AsyncWebServer server(80);
 String ntfyTopic = "ntfy.sh/mein_gotchi_geheim_123"; // default fallback
 
 volatile bool isBLEScanning = false;
+volatile bool isExporting = false;
 volatile bool requestTestPush = false;
 volatile bool requestUIDraw = false;
 volatile bool requestLogData = false;
@@ -625,19 +626,21 @@ void setup() {
     });
 
     server.on("/api/export", HTTP_GET, [](AsyncWebServerRequest *request){
-        if (isBLEScanning) {
+        if (isBLEScanning || isExporting) {
             request->send(503, "text/plain", "Busy");
             return;
         }
+        isExporting = true;
 
         AsyncWebServerResponse *response = request->beginChunkedResponse("text/csv", [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
             static File f;
             if (index == 0) {
                 f = LittleFS.open("/log.bin", "r");
-                if (!f) return 0;
-                // Skip head
+                if (!f) {
+                    isExporting = false;
+                    return 0;
+                }
                 f.seek(sizeof(uint32_t));
-
                 String header = "timestamp,plantIndex,temp,moisture,light,conductivity\n";
                 if (maxLen > header.length()) {
                     memcpy(buffer, header.c_str(), header.length());
@@ -647,6 +650,7 @@ void setup() {
 
             if (!f || !f.available()) {
                 if (f) f.close();
+                isExporting = false; // Flag hier zurücksetzen, wenn fertig
                 return 0;
             }
 
@@ -662,18 +666,12 @@ void setup() {
                             memcpy(buffer + bytesWritten, lineBuf, len);
                             bytesWritten += len;
                         } else {
-                            // Back up file pointer, we can't fit this
                             f.seek(f.position() - sizeof(LogEntry));
                             break;
                         }
                     }
                 }
             }
-
-            if (!f.available()) {
-                f.close();
-            }
-
             return bytesWritten;
         });
 
@@ -753,7 +751,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         bleTaskFunc,
         "bleTask",
-        4096,
+        8192,
         NULL,
         1,
         NULL,
