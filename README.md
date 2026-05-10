@@ -28,21 +28,43 @@ Um dem Gotchi zu sagen, mit welchem Sensor es sprechen soll, brauchst du die sog
 
 ---
 
-## 💻 Installation (Upload auf das Display)
+Basierend auf der Analyse deines Repositories wird die Firmware durch die GitHub Actions (`.github/workflows/build.yml`) automatisch kompiliert. Die Action sammelt alle `.bin`-Dateien aus dem Build-Ordner, verpackt sie in ein Archiv namens `LilyGo_Gotchi_Firmware.zip` und veröffentlicht diese als neues Release.
+
+Dadurch können Nutzer einfach die ZIP-Datei herunterladen und über einen Chromium-basierten Browser (via Web Serial API) flashen, ohne VS Code oder PlatformIO installieren zu müssen.
+
+Hier ist der angepasste Abschnitt für deine Anleitung:
+
+---
+
+### 💻 Installation (Upload auf das Display)
 
 Damit das Gotchi funktioniert, müssen zwei Dinge auf das LILYGO T-Display-S3 übertragen (geflasht) werden:
+
 1. Das **Programm** selbst (Firmware).
 2. Das **Dateisystem** (LittleFS), auf dem die Webseite und später deine Messdaten gespeichert werden.
 
-**Schritt-für-Schritt mit PlatformIO:**
-1. Installiere [Visual Studio Code](https://code.visualstudio.com/) und füge die Erweiterung **PlatformIO IDE** hinzu.
-2. Lade dieses Projekt herunter und öffne den Projektordner in Visual Studio Code.
-3. Schließe dein LILYGO T-Display-S3 per USB an den PC an.
-4. **Firmware hochladen:** Klicke unten in der blauen PlatformIO-Leiste auf den kleinen **Rechtspfeil (Upload)** `➔`. Warte, bis der Vorgang mit "SUCCESS" beendet ist.
-5. **Dateisystem hochladen (Sehr wichtig!):** Klicke links im Menü auf das Alien-Kopf-Symbol (PlatformIO). Gehe unter `Project Tasks` -> `lilygo-t-display-s3` -> `Platform` und klicke auf **"Build Filesystem Image"**. Wenn das erfolgreich war, klicke direkt darunter auf **"Upload Filesystem Image"**.
+Dank unserer automatischen Bereitstellung kannst du das Gotchi ganz einfach direkt über deinen Webbrowser flashen – komplett ohne Programmierkenntnisse oder Zusatzsoftware!
 
-Wenn beides erfolgreich war, drücke kurz den Reset-Knopf an der Seite deines LILYGO Displays.
+**Voraussetzungen:**
 
+* Ein **Chromium-basierter Webbrowser** (Google Chrome, Microsoft Edge, Opera oder Brave). *Hinweis: Firefox und Safari unterstützen die benötigte Web-Serial-Schnittstelle leider nicht.*
+* Ein USB-C Datenkabel (Achtung: Manche Kabel sind reine Ladekabel – es muss zwingend Daten übertragen können!).
+
+**Schritt-für-Schritt Anleitung:**
+
+1. **Dateien herunterladen:** Gehe auf der GitHub-Seite dieses Projekts rechts auf **"Releases"** und lade dir unter der neuesten Version die Datei `LilyGo_Gotchi_Firmware.zip` herunter.
+2. **Entpacken:** Entpacke die ZIP-Datei auf deinem Computer. Darin befinden sich mehrere `.bin` Dateien.
+3. **Web-Flasher öffnen:** Öffne in deinem Browser das offizielle Flash-Tool von Espressif: [https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/)
+4. **Verbinden:** Schließe dein LILYGO T-Display-S3 per USB an den PC an. Klicke auf der Webseite auf den Button **"Connect"** und wähle im aufklappenden Fenster den passenden USB-Port deines Displays aus.
+5. **Dateien zuweisen:** Nun musst du die entpackten `.bin` Dateien in das Tool laden und ihnen die richtigen Speicheradressen (Offsets) zuweisen. Trage die folgenden Werte ein (über "Add File" kannst du weitere Zeilen hinzufügen):
+* `bootloader.bin` ➔ Flash Address: `0x0`
+* `partitions.bin` ➔ Flash Address: `0x8000`
+* `firmware.bin` ➔ Flash Address: `0x10000`
+* `littlefs.bin` ➔ Flash Address: `0x310000` *(Adresse kann je nach exakter Partitionstabelle abweichen)*
+
+
+6. **Flashen:** Klicke unten auf **"Program"**. Der Fortschrittsbalken zeigt dir an, wie die Daten übertragen werden.
+7. Wenn der Vorgang mit einem Erfolgs-Dialog beendet ist, drücke kurz den **Reset-Knopf** an der Seite deines LILYGO Displays, um es neu zu starten.
 ---
 
 ## 🌐 Erster Start (WLAN & ntfy.sh einrichten)
