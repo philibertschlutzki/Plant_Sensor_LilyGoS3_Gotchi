@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gotchi Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #2c3e50; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: #ecf0f1; padding: 15px; border-radius: 5px; text-align: center; }
+        .card h3 { margin: 0 0 10px 0; font-size: 1.2em; color: #2980b9; }
+        button { display: block; width: 100%; padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 5px; font-size: 1em; cursor: pointer; margin-top: 20px; }
+        button:hover { background-color: #2980b9; }
+        canvas { max-width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Gotchi Dashboard</h1>
+
+        <h2>Live Daten</h2>
+        <div class="grid" id="live-data">
+            <p>Lade...</p>
+        </div>
+
+        <button onclick="sendPushTest()">🔔 Alle Benachrichtigungen erneut senden / Test-Push</button>
+
+        <h2>Historie Bodenfeuchtigkeit</h2>
+        <canvas id="moistureChart"></canvas>
+    </div>
+
+    <script>
+        const plantNames = ["Monstera", "Elefantenfuss", "Clusia"];
+
+        async function fetchLive() {
+            try {
+                const res = await fetch('/api/live');
+                if (res.status === 503) {
+                    console.log("Device is currently busy scanning BLE.");
+                    return;
+                }
+                const data = await res.json();
+                let html = '';
+                data.forEach((d, i) => {
+                    html += `
+                        <div class="card">
+                            <h3>${plantNames[i]}</h3>
+                            <p>💧 ${d.moisture} %</p>
+                            <p>🌡️ ${d.temperature} °C</p>
+                            <p>☀️ ${d.light} lx</p>
+                            <p>🧪 ${d.conductivity} µS</p>
+                            <small>🔋 ${d.battery}%</small>
+                        </div>
+                    `;
+                });
+                document.getElementById('live-data').innerHTML = html;
+            } catch (e) {
+                console.error("Fehler beim Laden der Live-Daten", e);
+            }
+        }
+
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/data');
+                if (res.status === 503) {
+                    console.log("Device is currently busy scanning BLE.");
+                    return;
+                }
+                const history = await res.json();
+
+                // Gruppieren der Daten für Chart.js
+                const datasets = plantNames.map((name, i) => ({
+                    label: name,
+                    data: [],
+                    fill: false,
+                    borderColor: i === 0 ? 'rgba(75, 192, 192, 1)' : (i === 1 ? 'rgba(255, 99, 132, 1)' : 'rgba(153, 102, 255, 1)'),
+                    tension: 0.1
+                }));
+
+                const labels = [];
+
+                history.forEach(entry => {
+                    // entry = {t: timestamp, i: index, m: moisture}
+                    const timeLabel = new Date(entry.t * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    if (!labels.includes(timeLabel)) labels.push(timeLabel);
+                    datasets[entry.i].data.push(entry.m);
+                });
+
+                new Chart(document.getElementById('moistureChart'), {
+                    type: 'line',
+                    data: { labels: labels, datasets: datasets },
+                    options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+
+            } catch (e) {
+                console.error("Fehler beim Laden der historischen Daten", e);
+            }
+        }
+
+        async function sendPushTest() {
+            try {
+                const res = await fetch('/api/push_test', { method: 'POST' });
+                if (res.ok) {
+                    alert("Test-Push gesendet!");
+                } else if (res.status === 503) {
+                    alert("Gerät scannt gerade, bitte gleich nochmal versuchen.");
+                } else {
+                    alert("Fehler beim Senden.");
+                }
+            } catch (e) {
+                alert("Verbindungsfehler.");
+            }
+        }
+
+        fetchLive();
+        fetchData();
+        setInterval(fetchLive, 30000); // Update live data every 30s
+    </script>
+</body>
+</html>
