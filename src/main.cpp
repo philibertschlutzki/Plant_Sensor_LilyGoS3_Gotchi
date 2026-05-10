@@ -10,6 +10,7 @@
 #include <ArduinoJson.h>
 #include "time.h"
 #include "xbms.h"
+#include "animations.h"
 
 Preferences preferences;
 AsyncWebServer server(80);
@@ -23,6 +24,8 @@ bool pushSent_Temp[3] = {false, false, false};
 
 
 void drawUI();
+void drawTamagotchiUI();
+void drawTechnicalUI();
 void logData();
 void checkAndSendNotifications(bool testPush = false);
 void pollBLE();
@@ -78,13 +81,130 @@ const unsigned long AUTO_CYCLE_INTERVAL = 10000UL; // 10 seconds
 
 // Button state
 const int BUTTON_PIN = 0;
+const int BUTTON_PIN_MODE = 14;
+
 int buttonState = HIGH;
 int lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 unsigned long buttonPressTime = 0;
+
+int buttonModeState = HIGH;
+int lastButtonModeState = HIGH;
+unsigned long lastDebounceModeTime = 0;
+unsigned long buttonModePressTime = 0;
+
 unsigned long debounceDelay = 50;
 
+bool tamagotchiMode = true;
+unsigned long lastAnimUpdate = 0;
+int currentFrame = 0;
+
 void drawUI() {
+    if (tamagotchiMode) {
+        drawTamagotchiUI();
+    } else {
+        drawTechnicalUI();
+    }
+}
+
+void drawTamagotchiUI() {
+    tft.fillScreen(TFT_BLACK);
+
+    PlantProfile p = profiles[currentPlantIndex];
+    PlantData d = cachedData[currentPlantIndex];
+
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawCentreString(p.name, 160, 10, 4);
+
+    // Check limits
+    bool tempLow = (d.temperature < p.minTemp);
+    bool tempHigh = (d.temperature > p.maxTemp);
+    bool tempOk = !tempLow && !tempHigh;
+
+    bool moistLow = (d.moisture < p.minMoisture);
+    bool moistHigh = (d.moisture > p.maxMoisture);
+    bool moistOk = !moistLow && !moistHigh;
+
+    bool lightOk = (d.light >= p.minLight && d.light <= p.maxLight);
+    bool condOk = (d.conductivity >= p.minConductivity && d.conductivity <= p.maxConductivity);
+
+    bool allOk = (tempOk && moistOk && lightOk && condOk);
+
+    // Draw Avatar (Ghost)
+    int ghostX = (320 - GHOST_WIDTH) / 2;
+    int ghostY = 40;
+
+    const uint16_t* frameToDraw = ghost_idle_frame1;
+
+    // Select animation based on status
+    if (allOk) {
+        frameToDraw = (currentFrame == 0) ? ghost_happy_frame1 : ghost_happy_frame2;
+    } else if (tempLow) {
+        frameToDraw = (currentFrame == 0) ? ghost_freeze_frame1 : ghost_freeze_frame2;
+    } else if (moistLow) {
+        frameToDraw = (currentFrame == 0) ? ghost_sweat_frame1 : ghost_sweat_frame2;
+    } else if (tempHigh || moistHigh || !lightOk || !condOk) {
+        frameToDraw = (currentFrame == 0) ? ghost_sad_frame1 : ghost_sad_frame2;
+    }
+
+    tft.pushImage(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, frameToDraw);
+
+    // Draw visual bars instead of numbers
+    int barY = 120;
+
+    // Moisture Bar
+    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
+    int moistWidth = map(constrain(d.moisture, 0, 100), 0, 100, 0, 200);
+    tft.fillRect(60, barY, moistWidth, 10, moistOk ? TFT_BLUE : TFT_RED);
+    if (moistWidth < 200) tft.fillRect(60 + moistWidth, barY, 200 - moistWidth, 10, TFT_BLACK); // Clear trailing
+    tft.drawString("Water", 10, barY - 2, 2);
+    barY += 15;
+
+    // Light Bar
+    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
+    int lightWidth = map(constrain(d.light, 0, 10000), 0, 10000, 0, 200);
+    tft.fillRect(60, barY, lightWidth, 10, lightOk ? TFT_YELLOW : TFT_RED);
+    if (lightWidth < 200) tft.fillRect(60 + lightWidth, barY, 200 - lightWidth, 10, TFT_BLACK);
+    tft.drawString("Light", 10, barY - 2, 2);
+    barY += 15;
+
+    // Temp Bar
+    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
+    int tempWidth = map(constrain((int)d.temperature, 0, 50), 0, 50, 0, 200);
+    tft.fillRect(60, barY, tempWidth, 10, tempOk ? TFT_ORANGE : TFT_RED);
+    if (tempWidth < 200) tft.fillRect(60 + tempWidth, barY, 200 - tempWidth, 10, TFT_BLACK);
+    tft.drawString("Temp", 10, barY - 2, 2);
+    barY += 15;
+
+    // Cond Bar
+    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
+    int condWidth = map(constrain(d.conductivity, 0, 2000), 0, 2000, 0, 200);
+    tft.fillRect(60, barY, condWidth, 10, condOk ? TFT_GREEN : TFT_RED);
+    if (condWidth < 200) tft.fillRect(60 + condWidth, barY, 200 - condWidth, 10, TFT_BLACK);
+    tft.drawString("Nutri", 10, barY - 2, 2);
+
+    // Auto mode indicator
+    if (autoCycleMode) {
+        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        tft.drawString("AUTO", 260, 10, 2);
+    }
+
+    // Pagination
+    int dotSpace = 15;
+    int startX = 160 - dotSpace;
+    for (int i=0; i<3; i++) {
+        if (i == currentPlantIndex) {
+            // Fill circle for active plant
+            tft.fillCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
+            // Indicate UI view below the active plant dot
+            tft.drawRect(startX + i*dotSpace - 4, 218, 8, 2, TFT_WHITE); // Tamagotchi mode indicator
+        } else {
+            tft.drawCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
+        }
+    }
+}
+
+void drawTechnicalUI() {
     tft.fillScreen(TFT_BLACK);
 
     PlantProfile p = profiles[currentPlantIndex];
@@ -101,8 +221,6 @@ void drawUI() {
     bool lightOk = (d.light >= p.minLight && d.light <= p.maxLight);
     bool condOk = (d.conductivity >= p.minConductivity && d.conductivity <= p.maxConductivity);
 
-    bool allOk = (tempOk && moistOk && lightOk && condOk);
-    
     int yOffset = 50;
 
     // Temp
@@ -140,15 +258,22 @@ void drawUI() {
     // Auto mode indicator
     if (autoCycleMode) {
         tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        tft.drawString("AUTO", 260, 200, 2);
+        tft.drawString("AUTO", 260, 10, 2);
     }
 
-    // Draw emotion bitmap (32x32)
-    // Draw at right side
-    if (allOk) {
-        tft.drawXBitmap(260, 80, ghost_bits, 32, 32, TFT_GREEN);
-    } else {
-        tft.drawXBitmap(260, 80, skull_bits, 32, 32, TFT_RED);
+    // Pagination
+    int dotSpace = 15;
+    int startX = 160 - dotSpace;
+    for (int i=0; i<3; i++) {
+        if (i == currentPlantIndex) {
+            // Fill circle for active plant
+            tft.fillCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
+            // Indicate UI view below the active plant dot
+            tft.drawRect(startX + i*dotSpace - 4, 218, 2, 2, TFT_WHITE); // Tech mode indicator (dots)
+            tft.drawRect(startX + i*dotSpace + 2, 218, 2, 2, TFT_WHITE);
+        } else {
+            tft.drawCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
+        }
     }
 }
 
@@ -231,6 +356,7 @@ void setup() {
     Serial.begin(115200);
     
     pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(BUTTON_PIN_MODE, INPUT_PULLUP);
 
     pinMode(15, OUTPUT);
     digitalWrite(15, HIGH);
@@ -441,7 +567,42 @@ void loop() {
         }
     }
 
-    // Button Logic
+    // Animation Logic
+    if (tamagotchiMode && (currentMillis - lastAnimUpdate > 500)) { // 500ms per frame
+        currentFrame = (currentFrame + 1) % 2;
+        lastAnimUpdate = currentMillis;
+
+        // Instead of redrawing the whole UI (which causes flicker due to fillScreen),
+        // we just update the avatar.
+        PlantProfile p = profiles[currentPlantIndex];
+        PlantData d = cachedData[currentPlantIndex];
+
+        bool tempLow = (d.temperature < p.minTemp);
+        bool tempHigh = (d.temperature > p.maxTemp);
+        bool moistLow = (d.moisture < p.minMoisture);
+        bool moistHigh = (d.moisture > p.maxMoisture);
+        bool lightOk = (d.light >= p.minLight && d.light <= p.maxLight);
+        bool condOk = (d.conductivity >= p.minConductivity && d.conductivity <= p.maxConductivity);
+        bool allOk = (!tempLow && !tempHigh && !moistLow && !moistHigh && lightOk && condOk);
+
+        int ghostX = (320 - GHOST_WIDTH) / 2;
+        int ghostY = 40;
+        const uint16_t* frameToDraw = ghost_idle_frame1;
+
+        if (allOk) {
+            frameToDraw = (currentFrame == 0) ? ghost_happy_frame1 : ghost_happy_frame2;
+        } else if (tempLow) {
+            frameToDraw = (currentFrame == 0) ? ghost_freeze_frame1 : ghost_freeze_frame2;
+        } else if (moistLow) {
+            frameToDraw = (currentFrame == 0) ? ghost_sweat_frame1 : ghost_sweat_frame2;
+        } else if (tempHigh || moistHigh || !lightOk || !condOk) {
+            frameToDraw = (currentFrame == 0) ? ghost_sad_frame1 : ghost_sad_frame2;
+        }
+
+        tft.pushImage(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, frameToDraw);
+    }
+
+    // Button Logic GPIO 0 (Cycle)
     int reading = digitalRead(BUTTON_PIN);
     if (reading != lastButtonState) {
         lastDebounceTime = currentMillis;
@@ -475,6 +636,33 @@ void loop() {
         }
     }
     lastButtonState = reading;
+
+    // Button Logic GPIO 14 (Mode Toggle)
+    int readingMode = digitalRead(BUTTON_PIN_MODE);
+    if (readingMode != lastButtonModeState) {
+        lastDebounceModeTime = currentMillis;
+    }
+
+    if ((currentMillis - lastDebounceModeTime) > debounceDelay) {
+        if (readingMode != buttonModeState) {
+            buttonModeState = readingMode;
+
+            if (buttonModeState == LOW) {
+                // Button pressed
+                buttonModePressTime = currentMillis;
+            } else {
+                // Button released
+                unsigned long pressDuration = currentMillis - buttonModePressTime;
+
+                if (pressDuration < 500) {
+                    // Short press
+                    tamagotchiMode = !tamagotchiMode;
+                    drawUI();
+                }
+            }
+        }
+    }
+    lastButtonModeState = readingMode;
 }
 
 
