@@ -10,7 +10,6 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "time.h"
-#include "xbms.h"
 #include "animations.h"
 #include <esp_task_wdt.h>
 #include <esp_wifi.h>
@@ -21,8 +20,10 @@ SemaphoreHandle_t dataMutex;
 AsyncWebServer server(80);
 String ntfyTopic = "ntfy.sh/mein_gotchi_geheim_123"; // default fallback
 
-bool isBLEScanning = false;
-bool requestTestPush = false;
+volatile bool isBLEScanning = false;
+volatile bool requestTestPush = false;
+volatile bool requestUIDraw = false;
+volatile bool requestLogData = false;
 bool pushSent_Moisture[3] = {false, false, false};
 bool pushSent_Temp[3] = {false, false, false};
 bool isOffline[3] = {false, false, false};
@@ -65,7 +66,7 @@ PlantProfile profiles[3];
 // Global Settings
 String nightModeStart = "22:00";
 String nightModeEnd = "07:00";
-int extBatPin = 1;
+int extBatPin = 10;
 float extBatDivider = 2.0;
 
 struct PlantData {
@@ -426,10 +427,6 @@ bool readFloraData(int index) {
 void pollBLE() {
     isBLEScanning = true;
 
-    tft.fillRect(0, 220, 320, 20, TFT_BLACK);
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    tft.drawString("Lese Sensoren...", 10, 220, 2);
-    
     // Optional: disconnect WiFi or pause webserver to protect BLE stack if needed,
     // but time-slicing via isBLEScanning for HTTP handlers should be enough.
 
@@ -438,9 +435,6 @@ void pollBLE() {
     }
 
     lastBlePoll = millis();
-    drawUI(); // Refresh UI after polling
-
-    logData();
 
     // Check if offline
     for (int i=0; i<3; i++) {
@@ -456,7 +450,8 @@ void pollBLE() {
         }
     }
 
-    checkAndSendNotifications();
+    requestUIDraw = true;
+    requestLogData = true;
 
     isBLEScanning = false;
 }
@@ -530,7 +525,7 @@ void setup() {
     }
 
     // Hardware Watchdog
-    esp_task_wdt_init(30, true);
+    esp_task_wdt_init(60, true);
     esp_task_wdt_add(NULL); // Add loopTask (Core 1) to WDT
 
     // Preferences & WiFiManager
@@ -577,12 +572,16 @@ void setup() {
         JsonDocument doc;
         JsonArray array = doc.to<JsonArray>();
         for (int i=0; i<3; i++) {
+            xSemaphoreTake(dataMutex, portMAX_DELAY);
+            PlantData d = cachedData[i];
+            xSemaphoreGive(dataMutex);
+
             JsonObject obj = array.add<JsonObject>();
-            obj["battery"] = cachedData[i].battery;
-            obj["temperature"] = cachedData[i].temperature;
-            obj["moisture"] = cachedData[i].moisture;
-            obj["light"] = cachedData[i].light;
-            obj["conductivity"] = cachedData[i].conductivity;
+            obj["battery"] = d.battery;
+            obj["temperature"] = d.temperature;
+            obj["moisture"] = d.moisture;
+            obj["light"] = d.light;
+            obj["conductivity"] = d.conductivity;
         }
         String response;
         serializeJson(doc, response);
@@ -780,6 +779,17 @@ void loop() {
         checkAndSendNotifications(true);
     }
 
+    if (requestUIDraw) {
+        requestUIDraw = false;
+        drawUI();
+    }
+
+    if (requestLogData) {
+        requestLogData = false;
+        logData();
+        checkAndSendNotifications();
+    }
+
     // BLE Polling is now handled by bleTask
 
 
@@ -963,7 +973,9 @@ void checkAndSendNotifications(bool testPush) {
 
     for (int i=0; i<3; i++) {
         PlantProfile p = profiles[i];
+        xSemaphoreTake(dataMutex, portMAX_DELAY);
         PlantData d = cachedData[i];
+        xSemaphoreGive(dataMutex);
 
         if (d.lastUpdate == 0) continue;
 
