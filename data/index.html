@@ -15,6 +15,14 @@
         button { display: block; width: 100%; padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 5px; font-size: 1em; cursor: pointer; margin-top: 20px; }
         button:hover { background-color: #2980b9; }
         canvas { max-width: 100%; margin-top: 20px; }
+
+        .admin-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #fafafa; border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+        .admin-form label { font-weight: bold; font-size: 0.9em; display: flex; flex-direction: column; }
+        .admin-form input, .admin-form select { padding: 5px; border: 1px solid #ccc; border-radius: 3px; margin-top: 5px; }
+        .admin-form .full-width { grid-column: span 2; }
+        .admin-form .checkbox-label { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+        .admin-form .checkbox-label input { margin: 0; }
+        .admin-form h3 { grid-column: span 2; margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -30,10 +38,134 @@
 
         <h2>Historie Bodenfeuchtigkeit</h2>
         <canvas id="moistureChart"></canvas>
+
+        <h2>Einstellungen / Administration</h2>
+        <div id="admin-section">
+            <p>Lade Konfiguration...</p>
+        </div>
+        <button onclick="saveConfig()">💾 Konfiguration speichern</button>
+
     </div>
 
     <script>
-        const plantNames = ["Monstera", "Elefantenfuss", "Clusia"];
+        let plantNames = ["Pflanze 1", "Pflanze 2", "Pflanze 3"];
+        let configData = [];
+
+        const templates = {
+            "Monstera": { minTemp: 18.0, maxTemp: 28.0, minMoisture: 20, maxMoisture: 60, minLight: 1000, maxLight: 4000, minConductivity: 350, maxConductivity: 1000 },
+            "Elefantenfuss": { minTemp: 15.0, maxTemp: 30.0, minMoisture: 5, maxMoisture: 20, minLight: 2000, maxLight: 8000, minConductivity: 150, maxConductivity: 500 },
+            "Clusia": { minTemp: 18.0, maxTemp: 28.0, minMoisture: 20, maxMoisture: 50, minLight: 1500, maxLight: 5000, minConductivity: 300, maxConductivity: 800 },
+            "Benutzerdefiniert": { minTemp: 0.0, maxTemp: 50.0, minMoisture: 0, maxMoisture: 100, minLight: 0, maxLight: 10000, minConductivity: 0, maxConductivity: 2000 }
+        };
+
+        function renderAdminForm(index, data) {
+            return `
+                <div class="admin-form" id="form-${index}">
+                    <h3>Slot ${index + 1}</h3>
+                    <label class="checkbox-label full-width">
+                        <input type="checkbox" id="active-${index}" ${data.active ? 'checked' : ''}> Aktiviert
+                    </label>
+                    <label class="full-width">Name der Pflanze: <input type="text" id="name-${index}" value="${data.name}"></label>
+                    <label class="full-width">MAC Adresse: <input type="text" id="mac-${index}" value="${data.mac}"></label>
+
+                    <label class="full-width">Vorlage wählen:
+                        <select onchange="applyTemplate(${index}, this.value)">
+                            <option value="Benutzerdefiniert">Benutzerdefiniert</option>
+                            <option value="Monstera" ${data.name === 'Monstera' ? 'selected' : ''}>Monstera</option>
+                            <option value="Elefantenfuss" ${data.name === 'Elefantenfuss' ? 'selected' : ''}>Elefantenfuß</option>
+                            <option value="Clusia" ${data.name === 'Clusia' ? 'selected' : ''}>Clusia</option>
+                        </select>
+                    </label>
+
+                    <label>Min Temp (°C): <input type="number" step="0.1" id="minTemp-${index}" value="${data.minTemp}"></label>
+                    <label>Max Temp (°C): <input type="number" step="0.1" id="maxTemp-${index}" value="${data.maxTemp}"></label>
+                    <label>Min Feuchtigkeit (%): <input type="number" id="minMoisture-${index}" value="${data.minMoisture}"></label>
+                    <label>Max Feuchtigkeit (%): <input type="number" id="maxMoisture-${index}" value="${data.maxMoisture}"></label>
+                    <label>Min Licht (lx): <input type="number" id="minLight-${index}" value="${data.minLight}"></label>
+                    <label>Max Licht (lx): <input type="number" id="maxLight-${index}" value="${data.maxLight}"></label>
+                    <label>Min Dünger (µS): <input type="number" id="minConductivity-${index}" value="${data.minConductivity}"></label>
+                    <label>Max Dünger (µS): <input type="number" id="maxConductivity-${index}" value="${data.maxConductivity}"></label>
+                </div>
+            `;
+        }
+
+        function applyTemplate(index, templateName) {
+            const tpl = templates[templateName];
+            if (tpl) {
+                if (templateName !== 'Benutzerdefiniert') {
+                    document.getElementById(`name-${index}`).value = templateName;
+                }
+                document.getElementById(`minTemp-${index}`).value = tpl.minTemp;
+                document.getElementById(`maxTemp-${index}`).value = tpl.maxTemp;
+                document.getElementById(`minMoisture-${index}`).value = tpl.minMoisture;
+                document.getElementById(`maxMoisture-${index}`).value = tpl.maxMoisture;
+                document.getElementById(`minLight-${index}`).value = tpl.minLight;
+                document.getElementById(`maxLight-${index}`).value = tpl.maxLight;
+                document.getElementById(`minConductivity-${index}`).value = tpl.minConductivity;
+                document.getElementById(`maxConductivity-${index}`).value = tpl.maxConductivity;
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                if (res.ok) {
+                    configData = await res.json();
+
+                    configData.forEach((d, i) => {
+                        if (i < plantNames.length) plantNames[i] = d.name || `Pflanze ${i+1}`;
+                    });
+
+                    let html = '';
+                    configData.forEach((d, i) => {
+                        html += renderAdminForm(i, d);
+                    });
+                    document.getElementById('admin-section').innerHTML = html;
+                }
+            } catch(e) {
+                console.error("Config konnte nicht geladen werden.", e);
+                document.getElementById('admin-section').innerHTML = '<p>Fehler beim Laden der Konfiguration.</p>';
+            }
+        }
+
+        async function saveConfig() {
+            const newConfig = [];
+            for (let i = 0; i < 3; i++) {
+                if (!document.getElementById(`form-${i}`)) continue;
+                newConfig.push({
+                    active: document.getElementById(`active-${i}`).checked,
+                    name: document.getElementById(`name-${i}`).value,
+                    mac: document.getElementById(`mac-${i}`).value,
+                    minTemp: parseFloat(document.getElementById(`minTemp-${i}`).value),
+                    maxTemp: parseFloat(document.getElementById(`maxTemp-${i}`).value),
+                    minMoisture: parseInt(document.getElementById(`minMoisture-${i}`).value),
+                    maxMoisture: parseInt(document.getElementById(`maxMoisture-${i}`).value),
+                    minLight: parseInt(document.getElementById(`minLight-${i}`).value),
+                    maxLight: parseInt(document.getElementById(`maxLight-${i}`).value),
+                    minConductivity: parseInt(document.getElementById(`minConductivity-${i}`).value),
+                    maxConductivity: parseInt(document.getElementById(`maxConductivity-${i}`).value)
+                });
+            }
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newConfig)
+                });
+                if (res.ok) {
+                    alert("Konfiguration erfolgreich gespeichert!");
+                    loadConfig();
+                    fetchLive();
+                } else if (res.status === 503) {
+                    alert("Gerät ist beschäftigt (BLE Scan). Bitte gleich nochmal versuchen.");
+                } else {
+                    alert("Fehler beim Speichern der Konfiguration.");
+                }
+            } catch(e) {
+                alert("Netzwerkfehler beim Speichern.");
+            }
+        }
 
         async function fetchLive() {
             try {
@@ -115,9 +247,14 @@
             }
         }
 
-        fetchLive();
-        fetchData();
-        setInterval(fetchLive, 30000); // Update live data every 30s
+        async function init() {
+            await loadConfig();
+            fetchLive();
+            fetchData();
+            setInterval(fetchLive, 30000); // Update live data every 30s
+        }
+
+        init();
     </script>
 </body>
 </html>

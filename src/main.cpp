@@ -26,6 +26,7 @@ void drawUI();
 void logData();
 void checkAndSendNotifications(bool testPush = false);
 void pollBLE();
+void loadConfig();
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -37,6 +38,7 @@ static NimBLEUUID uuid_sensor_data("00001a01-0000-1000-8000-00805f9b34fb");
 static NimBLEUUID uuid_write_mode("00001a00-0000-1000-8000-00805f9b34fb");
 
 struct PlantProfile {
+    bool active;
     String name;
     String mac;
     float minTemp;
@@ -49,14 +51,7 @@ struct PlantProfile {
     int maxConductivity;
 };
 
-// 1. Monstera: Temp: 18.0-28.0, Feuchtigkeit: 20-60, Licht: 1000-4000, Duenger: 350-1000
-// 2. Elefantenfuss: Temp: 15.0-30.0, Feuchtigkeit: 5-20, Licht: 2000-8000, Duenger: 150-500
-// 3. Clusia: Temp: 18.0-28.0, Feuchtigkeit: 20-50, Licht: 1500-5000, Duenger: 300-800
-PlantProfile profiles[3] = {
-    {"Monstera", "XX:XX:XX:XX:XX:01", 18.0, 28.0, 20, 60, 1000, 4000, 350, 1000},
-    {"Elefantenfuss", "XX:XX:XX:XX:XX:02", 15.0, 30.0, 5, 20, 2000, 8000, 150, 500},
-    {"Clusia", "XX:XX:XX:XX:XX:03", 18.0, 28.0, 20, 50, 1500, 5000, 300, 800}
-};
+PlantProfile profiles[3];
 
 struct PlantData {
     int battery;
@@ -261,6 +256,7 @@ void setup() {
                 f.close();
             }
         }
+        loadConfig();
     }
 
     // Preferences & WiFiManager
@@ -360,6 +356,52 @@ void setup() {
         }
         requestTestPush = true;
         request->send(200, "text/plain", "Test queued");
+    });
+
+    server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *request){
+        if (isBLEScanning) {
+            request->send(503, "text/plain", "Busy");
+            return;
+        }
+        File f = LittleFS.open("/config.json", "r");
+        if (!f) {
+            request->send(404, "text/plain", "Config not found");
+            return;
+        }
+        String configData = f.readString();
+        f.close();
+        request->send(200, "application/json", configData);
+    });
+
+    server.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+      [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        if (isBLEScanning) {
+            request->send(503, "text/plain", "Busy");
+            return;
+        }
+
+        if (index == 0 && total == len) {
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+            if (error) {
+                request->send(400, "text/plain", "Invalid JSON");
+                return;
+            }
+
+            File f = LittleFS.open("/config.json", "w");
+            if (!f) {
+                request->send(500, "text/plain", "Could not write file");
+                return;
+            }
+            serializeJson(doc, f);
+            f.close();
+
+            loadConfig();
+
+            request->send(200, "text/plain", "Config saved");
+        } else {
+            request->send(400, "text/plain", "Payload too large or chunked");
+        }
     });
 
     server.begin();
@@ -513,5 +555,48 @@ void checkAndSendNotifications(bool testPush) {
         } else if (moistOk && pushSent_Moisture[i]) {
             pushSent_Moisture[i] = false;
         }
+    }
+}
+void loadConfig() {
+    File f = LittleFS.open("/config.json", "r");
+    if (!f) {
+        Serial.println("Config not found, creating default config.json");
+        f = LittleFS.open("/config.json", "w");
+        if (f) {
+            f.print("[\n");
+            f.print("  {\"active\":true,\"name\":\"Monstera\",\"mac\":\"C4:7C:8D:XX:XX:01\",\"minTemp\":18.0,\"maxTemp\":28.0,\"minMoisture\":20,\"maxMoisture\":60,\"minLight\":1000,\"maxLight\":4000,\"minConductivity\":350,\"maxConductivity\":1000},\n");
+            f.print("  {\"active\":true,\"name\":\"Elefantenfuss\",\"mac\":\"C4:7C:8D:XX:XX:02\",\"minTemp\":15.0,\"maxTemp\":30.0,\"minMoisture\":5,\"maxMoisture\":20,\"minLight\":2000,\"maxLight\":8000,\"minConductivity\":150,\"maxConductivity\":500},\n");
+            f.print("  {\"active\":true,\"name\":\"Clusia\",\"mac\":\"C4:7C:8D:XX:XX:03\",\"minTemp\":18.0,\"maxTemp\":28.0,\"minMoisture\":20,\"maxMoisture\":50,\"minLight\":1500,\"maxLight\":5000,\"minConductivity\":300,\"maxConductivity\":800}\n");
+            f.print("]\n");
+            f.close();
+        }
+        f = LittleFS.open("/config.json", "r");
+    }
+
+    if (f) {
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, f);
+        if (error) {
+            Serial.println(F("Failed to read config.json"));
+        } else {
+            JsonArray arr = doc.as<JsonArray>();
+            for (int i = 0; i < 3; i++) {
+                if (i < arr.size()) {
+                    JsonObject obj = arr[i];
+                    profiles[i].active = obj["active"] | false;
+                    profiles[i].name = obj["name"].as<String>();
+                    profiles[i].mac = obj["mac"].as<String>();
+                    profiles[i].minTemp = obj["minTemp"] | 0.0;
+                    profiles[i].maxTemp = obj["maxTemp"] | 50.0;
+                    profiles[i].minMoisture = obj["minMoisture"] | 0;
+                    profiles[i].maxMoisture = obj["maxMoisture"] | 100;
+                    profiles[i].minLight = obj["minLight"] | 0;
+                    profiles[i].maxLight = obj["maxLight"] | 10000;
+                    profiles[i].minConductivity = obj["minConductivity"] | 0;
+                    profiles[i].maxConductivity = obj["maxConductivity"] | 2000;
+                }
+            }
+        }
+        f.close();
     }
 }
