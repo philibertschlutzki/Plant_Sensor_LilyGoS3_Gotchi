@@ -626,20 +626,21 @@ void setup() {
     });
 
     server.on("/api/export", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (isBLEScanning || isExporting) {
-        request->send(503, "text/plain", "Busy");
-        return;
-    }
-    isExporting = true; // Sperre setzen
+        if (isBLEScanning || isExporting) {
+            request->send(503, "text/plain", "Busy");
+            return;
+        }
+        isExporting = true; // Sperre setzen
 
         AsyncWebServerResponse *response = request->beginChunkedResponse("text/csv", [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
             static File f;
             if (index == 0) {
                 f = LittleFS.open("/log.bin", "r");
-                if (!f) return 0;
-                // Skip head
+                if (!f) {
+                    isExporting = false; // Sperre lösen falls Datei nicht öffenbar
+                    return 0;
+                }
                 f.seek(sizeof(uint32_t));
-
                 String header = "timestamp,plantIndex,temp,moisture,light,conductivity\n";
                 if (maxLen > header.length()) {
                     memcpy(buffer, header.c_str(), header.length());
@@ -649,6 +650,7 @@ void setup() {
 
             if (!f || !f.available()) {
                 if (f) f.close();
+                isExporting = false; // Sperre lösen wenn Fertig
                 return 0;
             }
 
@@ -664,23 +666,18 @@ void setup() {
                             memcpy(buffer + bytesWritten, lineBuf, len);
                             bytesWritten += len;
                         } else {
-                            // Back up file pointer, we can't fit this
                             f.seek(f.position() - sizeof(LogEntry));
                             break;
                         }
                     }
                 }
             }
-
-            if (!f.available()) {
-                f.close();
-            }
-
             return bytesWritten;
         });
 
         response->addHeader("Content-Disposition", "attachment; filename=\"gotchi_history.csv\"");
-        response->onDisconnect([](){ isExporting = false; }); // <--- DIESE ZEILE FEHLT
+        // Sperre auch bei vorzeitigem Verbindungsabbruch lösen:
+        response->onDisconnect([](){ isExporting = false; }); 
         request->send(response);
     });
 
