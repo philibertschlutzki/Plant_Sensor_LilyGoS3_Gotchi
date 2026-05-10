@@ -78,8 +78,8 @@ Beim allerersten Start kennt dein Gotchi dein WLAN noch nicht. Es öffnet daher 
 
 Dein Gotchi ist nun mit dem WLAN verbunden, weiß aber noch nicht, welche Pflanzen es überwachen soll. Das ändern wir jetzt auf der Webseite des Gotchis.
 
-1. Finde heraus, welche IP-Adresse dein Gotchi in deinem WLAN bekommen hat (z. B. durch einen Blick in die Weboberfläche deines Routers, wie der FritzBox).
-2. Öffne einen Browser (am PC oder Handy) und tippe diese IP-Adresse ein (z. B. `http://192.168.178.50`).
+1. Öffne einen Browser (am PC oder Handy) und tippe einfach `http://gotchi.local` ein.
+2. *(Fallback: Falls das nicht klappt, schau auf das Display deines Gotchis. Dort wird im Technischen Menü (kurzer Druck auf die seitliche Taste) die IP-Adresse angezeigt, die du stattdessen eingeben kannst).*
 3. Du siehst nun das **Gotchi Dashboard**. Scrolle nach unten zum Bereich **"Einstellungen / Administration"**.
 4. Hier findest du 3 "Slots" für bis zu 3 verschiedene Pflanzen:
    * Setze einen Haken bei **"Aktiviert"**, wenn du diesen Slot nutzen möchtest.

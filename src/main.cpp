@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <ESPAsyncWebServer.h>
+#include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <HTTPClient.h>
@@ -255,6 +256,18 @@ void drawTechnicalUI() {
     snprintf(buffer, sizeof(buffer), "Upd: vor %lu m", minutesAgo);
     tft.drawString(buffer, 10, 200, 2);
 
+    // Network Status
+    if (WiFi.status() == WL_CONNECTED) {
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        tft.drawString("Web: gotchi.local", 140, 180, 2);
+        String ipStr = "IP: " + WiFi.localIP().toString();
+        tft.drawString(ipStr, 140, 200, 2);
+    } else {
+        tft.setTextColor(TFT_RED, TFT_BLACK);
+        tft.drawString("WLAN: Getrennt", 140, 180, 2);
+        tft.drawString("(Reconnect...)", 140, 200, 2);
+    }
+
     // Auto mode indicator
     if (autoCycleMode) {
         tft.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -278,6 +291,10 @@ void drawTechnicalUI() {
 }
 
 bool readFloraData(int index) {
+    if (!profiles[index].active || profiles[index].mac.indexOf("XX:XX") != -1) {
+        return false;
+    }
+
     NimBLEAddress addr(profiles[index].mac.c_str());
     NimBLEClient* pClient = NimBLEDevice::createClient();
     pClient->setConnectTimeout(5);
@@ -399,6 +416,11 @@ void setup() {
         Serial.println("Failed to connect and hit timeout");
     } else {
         Serial.println("Connected to WiFi!");
+
+        if (MDNS.begin("gotchi")) {
+            MDNS.addService("http", "tcp", 80);
+        }
+
         tft.drawString("WLAN: Verbunden!", 10, 120, 2);
 
         // Save topic if changed
@@ -536,8 +558,8 @@ void setup() {
 
     NimBLEDevice::init("LilyGo-Gotchi");
     
-    // Initial poll
-    pollBLE();
+    // Delay first BLE scan by 10s
+    lastBlePoll = millis() - BLE_POLL_INTERVAL + 10000;
     
     // If the initial poll failed (lastUpdate remains 0), we still draw UI
     drawUI();
@@ -545,6 +567,14 @@ void setup() {
 
 void loop() {
     unsigned long currentMillis = millis();
+
+    static unsigned long lastWiFiCheck = 0;
+    if (currentMillis - lastWiFiCheck >= 20000) {
+        lastWiFiCheck = currentMillis;
+        if (WiFi.status() != WL_CONNECTED) {
+            WiFi.reconnect();
+        }
+    }
 
     if (requestTestPush) {
         requestTestPush = false;
