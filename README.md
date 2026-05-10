@@ -1,71 +1,76 @@
 # 🪴 Plant Sensor LilyGo S3 Gotchi
 
-Dieses Projekt verwandelt ein **LILYGO T-Display-S3** in einen kleinen Monitor ("Gotchi"), der sich über Bluetooth mit einem **Xiaomi Mi Flora** Pflanzensensor verbindet und die aktuellen Messwerte der Pflanze direkt auf dem Display anzeigt.
+Willkommen beim **Gotchi-Projekt**! Dieses Projekt verwandelt ein **LILYGO T-Display-S3** in einen praktischen kleinen Helfer, der dir auf einem Display anzeigt, wie es deinen Pflanzen geht. Es verbindet sich dazu über Bluetooth mit **Xiaomi Mi Flora** Sensoren.
 
-Das Besondere: Dank GitHub Actions wird der Code automatisch in der Cloud kompiliert. Du benötigst keine lokale Entwicklungsumgebung wie Arduino IDE oder PlatformIO, um das Gerät zu flashen!
-
----
-
-## 📦 Hardware & Sensoren
-
-### 1. LILYGO T-Display-S3
-Das Herzstück des Projekts. Es handelt sich um ein kompaktes Entwicklungsboard mit folgenden Spezifikationen:
-* **Mikrocontroller:** ESP32-S3R8 Dual-Core (unterstützt 2.4 GHz WLAN und Bluetooth 5 / BLE)
-* **Display:** 1.9 Zoll ST7789 IPS LCD (Auflösung: 170x320 Pixel)
-* **Anschluss:** USB-C (für Strom und Daten)
-
-### 2. Xiaomi Mi Flora (HHCC Flower Care)
-Ein batteriebetriebener Sensor, der direkt in die Blumenerde gesteckt wird. Er misst vier entscheidende Parameter:
-* Bodenfeuchtigkeit (%)
-* Nährstoffgehalt / Leitfähigkeit (µS/cm)
-* Temperatur (°C)
-* Lichtintensität (Lux)
+Alles, was du tun musst, ist dein Gotchi mit deinem WLAN zu verbinden und die Einstellungen über eine einfache Webseite (Web-GUI) vorzunehmen – ganz ohne kompliziertes Programmieren!
 
 ---
 
-## 🚀 Installation & Nutzung
+## 🌟 Projektbeschreibung: Was kann das Gotchi?
 
-Um das Projekt zu nutzen, musst du dem Display mitteilen, welchen Sensor es auslesen soll. Folge diesen 3 Schritten:
-
-### Schritt 1: MAC-Adresse des Sensors finden (Smartphone Methode)
-Der einfachste Weg, die Bluetooth-Adresse deines Sensors herauszufinden, ist über eine kostenlose Smartphone-App.
-
-1. Lade dir die kostenlose App **"nRF Connect for Mobile"** herunter (verfügbar für [iOS](https://apps.apple.com/app/nrf-connect-for-mobile/id1054362403) und [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.mcp)).
-2. Gehe mit deinem Smartphone direkt an die Pflanze mit dem Sensor heran.
-3. Öffne die App und tippe oben auf **"Scan"**. *(Android-Nutzer: Die App benötigt hierfür die Standortberechtigung)*.
-4. Suche in der durchlaufenden Liste nach einem Gerät mit dem Namen **"Flower care"** oder **"Flower mate"**.
-5. Direkt unter oder neben diesem Namen siehst du eine Zeichenfolge, die ungefähr so aussieht: `C4:7C:8D:XX:XX:XX`. Das ist die gesuchte MAC-Adresse. **Notiere sie dir!**
-
-### Schritt 2: Code anpassen & Firmware herunterladen
-Jetzt tragen wir diese Adresse in den Code ein und lassen die Server von GitHub die Arbeit machen.
-
-1. Öffne auf der Startseite dieses GitHub-Repositories den Ordner `src` und klicke auf die Datei `main.cpp`.
-2. Klicke auf das Stift-Symbol (Bearbeiten) und ändere in **Zeile 7** die Adresse auf deine eigene:
-   ```cpp
-   static NimBLEAddress floraAddress("C4:7C:8D:12:34:56"); // Trage hier deine notierte Adresse ein
-   ```
-3. Klicke oben rechts auf **Commit changes**, um die Datei zu speichern.
-4. **Automatische Kompilierung:** Sobald du speicherst, startet im Hintergrund die Kompilierung. Das dauert etwa 1 bis 2 Minuten.
-5. **Firmware laden:** Gehe zurück auf die Startseite dieses Repositories. Auf der **rechten Seite** findest du den Bereich **"Releases"**. Klicke dort auf die neueste Version (z. B. *Firmware Build #1*) und lade dir die angehängte Datei `LilyGo_Gotchi_Firmware.zip` herunter. Entpacke die ZIP-Datei auf deinem PC.
-
-### Schritt 3: Firmware auf das Display flashen
-Du musst keine komplizierte Software auf deinem PC installieren. Wir nutzen einen Web-Browser (Google Chrome oder Microsoft Edge empfohlen):
-
-1. Schließe dein LILYGO T-Display-S3 per USB an den PC an.
-2. Öffne das [Adafruit WebSerial ESPTool](https://adafruit.github.io/Adafruit_WebSerial_ESPTool/).
-3. Klicke oben rechts auf **Connect** und wähle den USB-Port deines Displays aus.
-4. Scrolle nach unten zum Bereich "Firmware". Lade hier die drei entpackten Dateien an die exakt passenden Speicheradressen (Offsets) hoch:
-   * Offset `0x0000` ➔ Wähle die Datei `bootloader.bin`
-   * Offset `0x8000` ➔ Wähle die Datei `partitions.bin`
-   * Offset `0x10000` ➔ Wähle die Datei `firmware.bin`
-5. Klicke auf **Program**. 
-
-Sobald der Vorgang abgeschlossen ist, drücke den Reset-Knopf an der Seite des LILYGO Displays. Dein Gotchi startet nun, verbindet sich mit dem Sensor und zeigt dir die Daten an! 🌱
+* **Live-Daten:** Liest drahtlos Temperatur, Bodenfeuchtigkeit, Licht und Dünger (Leitfähigkeit) von bis zu 3 Mi Flora Sensoren aus.
+* **Historie:** Speichert die Bodenfeuchtigkeit über die Zeit ab und zeigt dir auf einer Webseite ein anschauliches Diagramm (Chart).
+* **Push-Warnungen:** Schickt dir eine Nachricht aufs Handy (via ntfy.sh), wenn eine Pflanze zu trocken ist und Wasser braucht.
+* **Einfache Konfiguration:** Alle Einstellungen (Sensoren, Pflanzen-Namen, Min/Max-Werte) können bequem über den Webbrowser am PC oder Smartphone geändert werden.
 
 ---
 
-## 🛠️ Gebaut mit
-* [PlatformIO](https://platformio.org/)
-* [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) von Bodmer
-* [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino)
-```
+## 🛠️ Vorbereitung: MAC-Adresse des Sensors finden
+
+Um dem Gotchi zu sagen, mit welchem Sensor es sprechen soll, brauchst du die sogenannte "MAC-Adresse" des Sensors. Das ist wie eine Telefonnummer für Bluetooth-Geräte.
+
+**So findest du sie heraus:**
+1. Lade dir die kostenlose App **"nRF Connect for Mobile"** auf dein Smartphone herunter (verfügbar für [iOS](https://apps.apple.com/app/nrf-connect-for-mobile/id1054362403) und [Android](https://play.google.com/store/apps/details?id=no.nordicsemi.android.mcp)).
+2. Gehe ganz nah an den Sensor heran, der in der Erde steckt.
+3. Öffne die App und drücke oben auf **"Scan"**. *(Android: Du musst der App den Zugriff auf den Standort erlauben).*
+4. In der Liste sollte nun ein Gerät namens **"Flower care"** oder **"Flower mate"** auftauchen.
+5. Darunter steht eine Nummer wie `C4:7C:8D:12:34:56`. Das ist die gesuchte MAC-Adresse. **Schreibe sie dir auf!**
+
+---
+
+## 💻 Installation (Upload auf das Display)
+
+Damit das Gotchi funktioniert, müssen zwei Dinge auf das LILYGO T-Display-S3 übertragen (geflasht) werden:
+1. Das **Programm** selbst (Firmware).
+2. Das **Dateisystem** (LittleFS), auf dem die Webseite und später deine Messdaten gespeichert werden.
+
+**Schritt-für-Schritt mit PlatformIO:**
+1. Installiere [Visual Studio Code](https://code.visualstudio.com/) und füge die Erweiterung **PlatformIO IDE** hinzu.
+2. Lade dieses Projekt herunter und öffne den Projektordner in Visual Studio Code.
+3. Schließe dein LILYGO T-Display-S3 per USB an den PC an.
+4. **Firmware hochladen:** Klicke unten in der blauen PlatformIO-Leiste auf den kleinen **Rechtspfeil (Upload)** `➔`. Warte, bis der Vorgang mit "SUCCESS" beendet ist.
+5. **Dateisystem hochladen (Sehr wichtig!):** Klicke links im Menü auf das Alien-Kopf-Symbol (PlatformIO). Gehe unter `Project Tasks` -> `lilygo-t-display-s3` -> `Platform` und klicke auf **"Build Filesystem Image"**. Wenn das erfolgreich war, klicke direkt darunter auf **"Upload Filesystem Image"**.
+
+Wenn beides erfolgreich war, drücke kurz den Reset-Knopf an der Seite deines LILYGO Displays.
+
+---
+
+## 🌐 Erster Start (WLAN & ntfy.sh einrichten)
+
+Beim allerersten Start kennt dein Gotchi dein WLAN noch nicht. Es öffnet daher ein eigenes kleines WLAN-Netzwerk, um sich mit dir zu verbinden.
+
+1. Schau auf das Display des Gotchis. Es sollte "WLAN: Gotchi-Setup..." anzeigen.
+2. Nimm dein Smartphone oder deinen PC und suche nach neuen WLAN-Netzwerken.
+3. Verbinde dich mit dem Netzwerk **"Gotchi-Setup"**.
+4. Es öffnet sich automatisch eine Anmeldeseite (Captive Portal). Falls nicht, öffne deinen Browser und tippe `192.168.4.1` ein.
+5. Klicke auf **"Configure WiFi"**.
+6. Wähle dein Heim-WLAN aus und gib dein WLAN-Passwort ein.
+7. Ganz unten findest du das Feld **"ntfy.sh Topic"**. Überlege dir hier ein sicheres, geheimes Wort (z. B. `mein_geheimes_gotchi_123`). Lade dir die [ntfy App](https://ntfy.sh/) auf dein Handy und abonniere exakt dieses Wort, um später Push-Nachrichten zu erhalten, wenn du gießen musst.
+8. Klicke auf **Save**. Das Gotchi startet neu und verbindet sich nun mit deinem Heim-WLAN. Auf dem Display siehst du die Erfolgsmeldung!
+
+---
+
+## ⚙️ Konfiguration über das Web-GUI
+
+Dein Gotchi ist nun mit dem WLAN verbunden, weiß aber noch nicht, welche Pflanzen es überwachen soll. Das ändern wir jetzt auf der Webseite des Gotchis.
+
+1. Finde heraus, welche IP-Adresse dein Gotchi in deinem WLAN bekommen hat (z. B. durch einen Blick in die Weboberfläche deines Routers, wie der FritzBox).
+2. Öffne einen Browser (am PC oder Handy) und tippe diese IP-Adresse ein (z. B. `http://192.168.178.50`).
+3. Du siehst nun das **Gotchi Dashboard**. Scrolle nach unten zum Bereich **"Einstellungen / Administration"**.
+4. Hier findest du 3 "Slots" für bis zu 3 verschiedene Pflanzen:
+   * Setze einen Haken bei **"Aktiviert"**, wenn du diesen Slot nutzen möchtest.
+   * Wähle aus dem Dropdown-Menü eine **Vorlage** (z. B. "Monstera"). Die Felder für Wasser, Dünger etc. füllen sich automatisch mit passenden Werten!
+   * Trage bei **"MAC Adresse"** die Adresse ein, die du vorhin in der App gefunden hast.
+5. Klicke am Ende auf den blauen Button **"💾 Konfiguration speichern"**.
+
+Dein Gotchi übernimmt die Einstellungen sofort und beginnt, die Daten deiner Pflanzen auszulesen und auf dem Display anzuzeigen! 🌱 Viel Spaß!
