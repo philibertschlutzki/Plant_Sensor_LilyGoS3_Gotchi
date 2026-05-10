@@ -753,7 +753,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         bleTaskFunc,
         "bleTask",
-        4096,
+        8192,
         NULL,
         1,
         NULL,
