@@ -1,7 +1,7 @@
 import urllib.request
 import os
 
-url = "https://cdn.jsdelivr.net/npm/chart.js"
+url = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
 output_path = os.path.join("data", "chart.min.js")
 
 if not os.path.exists("data"):
