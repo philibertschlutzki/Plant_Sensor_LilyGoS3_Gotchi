@@ -56,7 +56,7 @@ Dank unserer automatischen Bereitstellung kannst du das Gotchi ganz einfach dire
 
 
 6. **Flashen:** Klicke unten auf **"Program"**. Der Fortschrittsbalken zeigt dir an, wie die Daten übertragen werden.
-7. Neustart: Wenn der Balken 100% erreicht hat und der Erfolgs-Dialog erscheint, versucht das Tool oft einen automatischen Neustart ("Hard resetting via RTS pin..."). Das Display sollte nun das Gotchi-Setup anzeigen. Falls der Bildschirm dunkel bleibt oder nicht reagiert, drücke einfach kurz den Reset-Knopf an der Seite deines LILYGO Displays, um es manuell neu zu starten.
+7. **Neustart**: Wenn der Balken 100% erreicht hat und der Erfolgs-Dialog erscheint, versucht das Tool oft einen automatischen Neustart ("Hard resetting via RTS pin..."). Das Display sollte nun das Gotchi-Setup anzeigen. Falls der Bildschirm dunkel bleibt oder nicht reagiert, drücke einfach kurz den Reset-Knopf an der Seite deines LILYGO Displays, um es manuell neu zu starten.
 ---
 
 ## 🌐 Erster Start (WLAN & ntfy.sh einrichten)
