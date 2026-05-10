@@ -1,3 +1,4 @@
+![LilyGo S3 Gotchi Display](liylgo.jpg)
 # 🪴 Plant Sensor LilyGo S3 Gotchi
 
 Willkommen beim **Gotchi-Projekt**! Dieses Projekt verwandelt ein **LILYGO T-Display-S3** in einen praktischen kleinen Helfer, der dir auf einem Display anzeigt, wie es deinen Pflanzen geht. Es verbindet sich dazu über Bluetooth mit **Xiaomi Mi Flora** Sensoren.
