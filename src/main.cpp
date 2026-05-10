@@ -626,10 +626,11 @@ void setup() {
     });
 
     server.on("/api/export", HTTP_GET, [](AsyncWebServerRequest *request){
-        if (isBLEScanning) {
-            request->send(503, "text/plain", "Busy");
-            return;
-        }
+    if (isBLEScanning || isExporting) {
+        request->send(503, "text/plain", "Busy");
+        return;
+    }
+    isExporting = true; // Sperre setzen
 
         AsyncWebServerResponse *response = request->beginChunkedResponse("text/csv", [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
             static File f;
