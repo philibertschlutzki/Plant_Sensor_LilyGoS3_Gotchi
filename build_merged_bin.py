@@ -102,15 +102,15 @@ def after_build(source, target, env):
     littlefs_offset = f"0x{littlefs_offset_int:x}"
     print(f"[DEBUG] LittleFS offset: {littlefs_offset}")
 
-    # Kommando zusammenbauen
+    # Kommando zusammenbauen — mit modernen Flag-Namen (ohne Underscores)
     cmd = [
         env.subst("$PYTHONEXE"), "-m", "esptool",
         "--chip", "esp32s3",
-        "merge_bin",
+        "merge-bin",  # Modernere Syntax statt "merge_bin"
         "-o", merged_bin,
-        "--flash_mode", "dio",
-        "--flash_freq", "80m",
-        "--flash_size", "16MB",
+        "--flash-mode", "dio",  # Statt "--flash_mode"
+        "--flash-freq", "80m",  # Statt "--flash_freq"
+        "--flash-size", "16MB", # Statt "--flash_size"
     ]
 
     for offset, path in required:
@@ -125,7 +125,7 @@ def after_build(source, target, env):
     print(f"\n[DEBUG] esptool Kommando:")
     print(f"  {' '.join(cmd)}")
 
-    print(f"\n[DEBUG] Starte esptool merge_bin...")
+    print(f"\n[DEBUG] Starte esptool merge-bin...")
     try:
         result = subprocess.run(cmd, capture_output=False)
         print(f"[DEBUG] esptool exit code: {result.returncode}")
