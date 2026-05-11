@@ -24,18 +24,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
+      - name: Install esptool
+        run: pip install esptool
+
       - name: Compile Firmware & Filesystem
         run: |
           pio run -t buildfs -e lilygo-t-display-s3
           pio run -e lilygo-t-display-s3
 
-      # NEU: Prüft, ob der Merge geklappt hat und LittleFS drin ist
       - name: Verify merged binary
         run: |
           ls -lh LilyGo_Gotchi_Full_Merged.bin
           SIZE=$(stat -c%s LilyGo_Gotchi_Full_Merged.bin)
           echo "Merged binary size: $SIZE bytes"
-          # Muss > 13 MB sein (Firmware ~3 MB + LittleFS bei 0xC90000 ~3.4 MB = ~13 MB gesamt)
           [ "$SIZE" -gt 13631488 ] || (echo "ERROR: Binary zu klein – LittleFS fehlt im Merge!" && exit 1)
 
       - name: Package Firmware
