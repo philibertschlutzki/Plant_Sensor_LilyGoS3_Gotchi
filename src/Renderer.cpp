@@ -24,7 +24,6 @@ GotchiRenderer::GotchiRenderer() {
 void GotchiRenderer::init(TFT_eSPI* tft) {
     sprite = new TFT_eSprite(tft);
     sprite->createSprite(320, 170);
-    sprite->setSwapBytes(true); // Since PROGMEM arrays are usually little-endian RGB565, or we may need to swap based on macro
     sprite->setTextDatum(TC_DATUM); // Set text alignment to center
 
     if (LittleFS.exists("/tamagotchi.vlw")) {
@@ -96,7 +95,7 @@ void GotchiRenderer::drawParticles() {
                 sprite->fillRect((int)particles[i].x, (int)particles[i].y, 2, 2, particles[i].color);
             } else if (particles[i].type == PARTICLE_ZZZ) {
                 sprite->setTextColor(particles[i].color);
-                sprite->drawString("z", (int)particles[i].x, (int)particles[i].y);
+                sprite->drawString(i % 2 == 0 ? "z" : "Z", (int)particles[i].x, (int)particles[i].y);
             }
         }
     }
@@ -129,9 +128,9 @@ void GotchiRenderer::drawThirstBubble(int x, int y) {
     }
 }
 
-void GotchiRenderer::drawSunOverlay() {
-    // Draw sunglasses over the avatar. Avatar is 64x64, drawn at (320-64)/2 = 128, 40
-    sprite->pushImage(128, 40, AVATAR_W, AVATAR_H, (uint16_t*)overlay_sunglasses, 0x0000); // Assuming 0 is transparent
+void GotchiRenderer::drawSunOverlay(int avatarX, int avatarY) {
+    // Draw sunglasses over the avatar.
+    sprite->pushImage(avatarX, avatarY, AVATAR_W, AVATAR_H, (uint16_t*)overlay_sunglasses, 0x0000); // Assuming 0 is transparent
 }
 
 void GotchiRenderer::drawNeedIcon(int x, int y, int value, int minVal, int maxVal, const uint16_t* fullIcon, const uint16_t* emptyIcon, const uint16_t* grayIcon, bool isOffline) {
@@ -163,6 +162,7 @@ void GotchiRenderer::drawThermometer(int x, int y, float temp, float minTemp, fl
 
 void GotchiRenderer::drawNeedIndicators(const PlantProfile& profile, const PlantData& data, bool isOffline) {
     int startY = 135;
+    sprite->setTextColor(TFT_WHITE, TFT_BLACK);
     // Moisture (Drops)
     sprite->drawString("Wasser", 10, startY);
     drawNeedIcon(70, startY, data.moisture, profile.minMoisture, profile.maxMoisture, icon_drop_full, icon_drop_empty, icon_drop_gray, isOffline);
@@ -326,7 +326,7 @@ void GotchiRenderer::update(unsigned long currentMillis, const PlantProfile& pro
     }
 
     if (data.light > 5000 && !inNightMode && !isOffline) {
-        sprite->pushImage(avatarX, avatarY, AVATAR_W, AVATAR_H, (uint16_t*)overlay_sunglasses, 0x0000);
+        drawSunOverlay(avatarX, avatarY);
     }
 
     // Thermometer

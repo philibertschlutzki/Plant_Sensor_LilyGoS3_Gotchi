@@ -969,9 +969,9 @@ void loadConfig() {
         f = LittleFS.open("/config.json", "w");
         if (f) {
             f.print("[\n");
-            f.print("  {\"active\":true,\"name\":\"Monstera\",\"mac\":\"C4:7C:8D:XX:XX:01\",\"minTemp\":18.0,\"maxTemp\":28.0,\"minMoisture\":20,\"maxMoisture\":60,\"minLight\":1000,\"maxLight\":4000,\"minConductivity\":350,\"maxConductivity\":1000},\n");
-            f.print("  {\"active\":true,\"name\":\"Elefantenfuss\",\"mac\":\"C4:7C:8D:XX:XX:02\",\"minTemp\":15.0,\"maxTemp\":30.0,\"minMoisture\":5,\"maxMoisture\":20,\"minLight\":2000,\"maxLight\":8000,\"minConductivity\":150,\"maxConductivity\":500},\n");
-            f.print("  {\"active\":true,\"name\":\"Clusia\",\"mac\":\"C4:7C:8D:XX:XX:03\",\"minTemp\":18.0,\"maxTemp\":28.0,\"minMoisture\":20,\"maxMoisture\":50,\"minLight\":1500,\"maxLight\":5000,\"minConductivity\":300,\"maxConductivity\":800}\n");
+            f.print("  {\"active\":true,\"name\":\"Monstera\",\"mac\":\"C4:7C:8D:XX:XX:01\",\"minTemp\":18.0,\"maxTemp\":28.0,\"minMoisture\":20,\"maxMoisture\":60,\"minLight\":1000,\"maxLight\":4000,\"minConductivity\":350,\"maxConductivity\":1000,\"moistureOffset\":0},\n");
+            f.print("  {\"active\":true,\"name\":\"Elefantenfuss\",\"mac\":\"C4:7C:8D:XX:XX:02\",\"minTemp\":15.0,\"maxTemp\":30.0,\"minMoisture\":5,\"maxMoisture\":20,\"minLight\":2000,\"maxLight\":8000,\"minConductivity\":150,\"maxConductivity\":500,\"moistureOffset\":0},\n");
+            f.print("  {\"active\":true,\"name\":\"Clusia\",\"mac\":\"C4:7C:8D:XX:XX:03\",\"minTemp\":18.0,\"maxTemp\":28.0,\"minMoisture\":20,\"maxMoisture\":50,\"minLight\":1500,\"maxLight\":5000,\"minConductivity\":300,\"maxConductivity\":800,\"moistureOffset\":0}\n");
             f.print("]\n");
             f.close();
         }
@@ -999,6 +999,7 @@ void loadConfig() {
                     profiles[i].maxLight = obj["maxLight"] | 10000;
                     profiles[i].minConductivity = obj["minConductivity"] | 0;
                     profiles[i].maxConductivity = obj["maxConductivity"] | 2000;
+                    profiles[i].moistureOffset = obj["moistureOffset"] | 0;
                 }
             }
         }
