@@ -15,6 +15,8 @@
 #include <esp_wifi.h>
 #include <ElegantOTA.h>
 
+using fs::File;
+
 Preferences preferences;
 SemaphoreHandle_t dataMutex;
 AsyncWebServer server(80);
@@ -47,20 +49,10 @@ static NimBLEUUID uuid_version_batt("00001a02-0000-1000-8000-00805f9b34fb");
 static NimBLEUUID uuid_sensor_data("00001a01-0000-1000-8000-00805f9b34fb");
 static NimBLEUUID uuid_write_mode("00001a00-0000-1000-8000-00805f9b34fb");
 
-struct PlantProfile {
-    bool active;
-    String name;
-    String mac;
-    float minTemp;
-    float maxTemp;
-    int minMoisture;
-    int maxMoisture;
-    int minLight;
-    int maxLight;
-    int minConductivity;
-    int maxConductivity;
-    int moistureOffset;
-};
+#include "types.h"
+#include "Renderer.h"
+
+GotchiRenderer renderer;
 
 PlantProfile profiles[3];
 
@@ -69,15 +61,6 @@ String nightModeStart = "22:00";
 String nightModeEnd = "07:00";
 int extBatPin = 10;
 float extBatDivider = 2.0;
-
-struct PlantData {
-    int battery;
-    float temperature;
-    int moisture;
-    int light;
-    int conductivity;
-    unsigned long lastUpdate;
-};
 
 struct LogEntry {
     uint32_t timestamp;
@@ -140,106 +123,10 @@ void drawUI() {
 }
 
 void drawTamagotchiUI() {
-    PlantProfile p = profiles[currentPlantIndex];
-    xSemaphoreTake(dataMutex, portMAX_DELAY);
-    PlantData d = cachedData[currentPlantIndex];
-    xSemaphoreGive(dataMutex);
-
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawCentreString(p.name, 160, 10, 4);
-
-    // Check limits
-    bool tempLow = (d.temperature < p.minTemp);
-    bool tempHigh = (d.temperature > p.maxTemp);
-    bool tempOk = !tempLow && !tempHigh;
-
-    bool moistLow = (d.moisture < p.minMoisture);
-    bool moistHigh = (d.moisture > p.maxMoisture);
-    bool moistOk = !moistLow && !moistHigh;
-
-    bool lightOk = (d.light >= p.minLight && d.light <= p.maxLight);
-    bool condOk = (d.conductivity >= p.minConductivity && d.conductivity <= p.maxConductivity);
-
-    bool allOk = (tempOk && moistOk && lightOk && condOk);
-
-    // Draw Avatar (Ghost)
-    int ghostX = (320 - GHOST_WIDTH) / 2;
-    int ghostY = 40;
-
-    const uint16_t* frameToDraw = ghost_idle_frame1;
-
-    // Select animation based on status
-    if (isOffline[currentPlantIndex]) {
-        tft.fillRect(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, TFT_BLACK);
-        tft.setTextColor(TFT_RED, TFT_BLACK);
-        tft.drawCentreString("Sensor Offline", 160, ghostY + 30, 4);
-    } else {
-        if (allOk) {
-            frameToDraw = (currentFrame == 0) ? ghost_happy_frame1 : ghost_happy_frame2;
-        } else if (tempLow) {
-            frameToDraw = (currentFrame == 0) ? ghost_freeze_frame1 : ghost_freeze_frame2;
-        } else if (moistLow) {
-            frameToDraw = (currentFrame == 0) ? ghost_sweat_frame1 : ghost_sweat_frame2;
-        } else if (tempHigh || moistHigh || !lightOk || !condOk) {
-            frameToDraw = (currentFrame == 0) ? ghost_sad_frame1 : ghost_sad_frame2;
-        }
-
-        tft.pushImage(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, frameToDraw);
-    }
-
-    // Draw visual bars instead of numbers
-    int barY = 120;
-
-    // Moisture Bar
-    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
-    int moistWidth = map(constrain(d.moisture, 0, 100), 0, 100, 0, 200);
-    tft.fillRect(60, barY, moistWidth, 10, moistOk ? TFT_BLUE : TFT_RED);
-    if (moistWidth < 200) tft.fillRect(60 + moistWidth, barY, 200 - moistWidth, 10, TFT_BLACK); // Clear trailing
-    tft.drawString("Water", 10, barY - 2, 2);
-    barY += 15;
-
-    // Light Bar
-    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
-    int lightWidth = map(constrain(d.light, 0, 10000), 0, 10000, 0, 200);
-    tft.fillRect(60, barY, lightWidth, 10, lightOk ? TFT_YELLOW : TFT_RED);
-    if (lightWidth < 200) tft.fillRect(60 + lightWidth, barY, 200 - lightWidth, 10, TFT_BLACK);
-    tft.drawString("Light", 10, barY - 2, 2);
-    barY += 15;
-
-    // Temp Bar
-    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
-    int tempWidth = map(constrain((int)d.temperature, 0, 50), 0, 50, 0, 200);
-    tft.fillRect(60, barY, tempWidth, 10, tempOk ? TFT_ORANGE : TFT_RED);
-    if (tempWidth < 200) tft.fillRect(60 + tempWidth, barY, 200 - tempWidth, 10, TFT_BLACK);
-    tft.drawString("Temp", 10, barY - 2, 2);
-    barY += 15;
-
-    // Cond Bar
-    tft.drawRect(60, barY, 200, 10, TFT_WHITE);
-    int condWidth = map(constrain(d.conductivity, 0, 2000), 0, 2000, 0, 200);
-    tft.fillRect(60, barY, condWidth, 10, condOk ? TFT_GREEN : TFT_RED);
-    if (condWidth < 200) tft.fillRect(60 + condWidth, barY, 200 - condWidth, 10, TFT_BLACK);
-    tft.drawString("Nutri", 10, barY - 2, 2);
-
-    // Auto mode indicator
-    if (autoCycleMode) {
-        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        tft.drawString("AUTO", 260, 10, 2);
-    }
-
-    // Pagination
-    int dotSpace = 15;
-    int startX = 160 - dotSpace;
-    for (int i=0; i<3; i++) {
-        if (i == currentPlantIndex) {
-            // Fill circle for active plant
-            tft.fillCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
-            // Indicate UI view below the active plant dot
-            tft.drawRect(startX + i*dotSpace - 4, 218, 8, 2, TFT_WHITE); // Tamagotchi mode indicator
-        } else {
-            tft.drawCircle(startX + i*dotSpace, 210, 4, TFT_WHITE);
-        }
-    }
+    // This is now handled entirely by the renderer in loop()
+    // We leave this empty or removed, but since it's called in drawUI(), we can just do nothing
+    // or trigger a full redraw from the loop. Actually, drawUI() is for manual redraws.
+    // The renderer updates every frame in loop().
 }
 
 void drawTechnicalUI() {
@@ -406,16 +293,23 @@ bool readFloraData(int index) {
         if (value.length() >= 16) {
             int raw_moisture = (uint8_t)value[7];
             int calibrated = raw_moisture + profiles[index].moistureOffset;
+            int newMoisture = constrain(calibrated, 0, 100);
 
             xSemaphoreTake(dataMutex, portMAX_DELAY);
+            int oldMoisture = cachedData[index].moisture;
             cachedData[index].temperature = ((uint8_t)value[0] + (uint8_t)value[1] * 256) / 10.0;
             cachedData[index].light = (uint8_t)value[3] + (uint8_t)value[4] * 256 + (uint8_t)value[5] * 65536 + (uint8_t)value[6] * 16777216;
-            cachedData[index].moisture = constrain(calibrated, 0, 100);
+            cachedData[index].moisture = newMoisture;
             cachedData[index].conductivity = (uint8_t)value[8] + (uint8_t)value[9] * 256;
             cachedData[index].lastUpdate = millis();
             isOffline[index] = false;
             pushSent_Offline[index] = false;
             xSemaphoreGive(dataMutex);
+
+            // Check for watering ecstasy (delta > 20%)
+            if (index == currentPlantIndex && newMoisture > oldMoisture && (newMoisture - oldMoisture) > 20) {
+                renderer.triggerWateringEcstasy();
+            }
         }
     }
 
@@ -525,6 +419,9 @@ void setup() {
         }
         loadConfig();
     }
+
+    // Initialize the renderer after LittleFS so it can load the font
+    renderer.init(&tft);
 
     // Hardware Watchdog
     esp_task_wdt_init(60, true);
@@ -850,39 +747,33 @@ void loop() {
         }
     }
 
-    // Animation Logic
-    if (uiMode == 0 && (currentMillis - lastAnimUpdate > 500)) { // 500ms per frame
-        currentFrame = (currentFrame + 1) % 2;
-        lastAnimUpdate = currentMillis;
-
-        // Instead of redrawing the whole UI (which causes flicker due to fillScreen),
-        // we just update the avatar.
+    // Rendering update
+    if (uiMode == 0) {
         PlantProfile p = profiles[currentPlantIndex];
+        xSemaphoreTake(dataMutex, portMAX_DELAY);
         PlantData d = cachedData[currentPlantIndex];
+        xSemaphoreGive(dataMutex);
 
-        bool tempLow = (d.temperature < p.minTemp);
-        bool tempHigh = (d.temperature > p.maxTemp);
-        bool moistLow = (d.moisture < p.minMoisture);
-        bool moistHigh = (d.moisture > p.maxMoisture);
-        bool lightOk = (d.light >= p.minLight && d.light <= p.maxLight);
-        bool condOk = (d.conductivity >= p.minConductivity && d.conductivity <= p.maxConductivity);
-        bool allOk = (!tempLow && !tempHigh && !moistLow && !moistHigh && lightOk && condOk);
+        struct tm timeinfo;
+        bool inNightMode = false;
+        if (getLocalTime(&timeinfo)) {
+            int currentMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
+            int startHour = nightModeStart.substring(0, 2).toInt();
+            int startMin = nightModeStart.substring(3, 5).toInt();
+            int endHour = nightModeEnd.substring(0, 2).toInt();
+            int endMin = nightModeEnd.substring(3, 5).toInt();
 
-        int ghostX = (320 - GHOST_WIDTH) / 2;
-        int ghostY = 40;
-        const uint16_t* frameToDraw = ghost_idle_frame1;
+            int startMins = startHour * 60 + startMin;
+            int endMins = endHour * 60 + endMin;
 
-        if (allOk) {
-            frameToDraw = (currentFrame == 0) ? ghost_happy_frame1 : ghost_happy_frame2;
-        } else if (tempLow) {
-            frameToDraw = (currentFrame == 0) ? ghost_freeze_frame1 : ghost_freeze_frame2;
-        } else if (moistLow) {
-            frameToDraw = (currentFrame == 0) ? ghost_sweat_frame1 : ghost_sweat_frame2;
-        } else if (tempHigh || moistHigh || !lightOk || !condOk) {
-            frameToDraw = (currentFrame == 0) ? ghost_sad_frame1 : ghost_sad_frame2;
+            if (startMins <= endMins) {
+                if (currentMins >= startMins && currentMins <= endMins) inNightMode = true;
+            } else {
+                if (currentMins >= startMins || currentMins <= endMins) inNightMode = true;
+            }
         }
 
-        tft.pushImage(ghostX, ghostY, GHOST_WIDTH, GHOST_HEIGHT, frameToDraw);
+        renderer.update(currentMillis, p, d, isOffline[currentPlantIndex], inNightMode, currentPlantIndex);
     }
 
     // Button Logic GPIO 0 (Cycle)
@@ -899,6 +790,7 @@ void loop() {
                 // Button pressed
                 buttonPressTime = currentMillis;
                 lastInteractionTime = currentMillis;
+                renderer.triggerWakeupScare();
             } else {
                 // Button released
                 unsigned long pressDuration = currentMillis - buttonPressTime;
@@ -935,6 +827,7 @@ void loop() {
                 // Button pressed
                 buttonModePressTime = currentMillis;
                 lastInteractionTime = currentMillis;
+                renderer.triggerWakeupScare();
             } else {
                 // Button released
                 unsigned long pressDuration = currentMillis - buttonModePressTime;
