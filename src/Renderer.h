@@ -76,7 +76,7 @@ private:
     // Environment/Bubble
     void drawThirstBubble(int x, int y);
     void drawTable();
-    void drawSunOverlay();
+    void drawSunOverlay(int avatarX, int avatarY);
 
     // Helper to select the correct avatar frame
     const uint16_t* getAvatarFrame(const PlantProfile& profile, const PlantData& data, bool isOffline, bool inNightMode, int plantIdx, bool& allOk);
